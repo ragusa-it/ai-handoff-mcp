@@ -197,14 +197,17 @@ class ContextManagerService {
     return breakdown;
   }
 
-  async getSessionsByAgent(): Promise<Session[]> {
-    // This would need a custom query - for now return empty array
-    // In a full implementation, you'd add this method to DatabaseManager
-    return [];
-  }
-
-  async getActiveSessions(): Promise<Session[]> {
-    // This would need a custom query - for now return empty array
+  async getSessionsByAgent(agent: string): Promise<Session[]> {
+    try {
+      const sessions = await db.query<Session>(
+        'SELECT * FROM sessions WHERE agentFrom = $1 OR agentTo = $1',
+        [agent]
+      );
+      return sessions.rows;
+    } catch (error) {
+      console.error('Error fetching sessions by agent:', error);
+      throw error;
+    }
     // In a full implementation, you'd add this method to DatabaseManager
     return [];
   }
