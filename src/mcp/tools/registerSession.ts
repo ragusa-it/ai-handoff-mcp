@@ -1,4 +1,5 @@
 import { db } from '../../database/index.js';
+import { structuredLogger } from '../../services/structuredLogger.js';
 
 export interface RegisterSessionArgs {
   sessionKey: string;
@@ -8,11 +9,26 @@ export interface RegisterSessionArgs {
 
 export async function registerSessionTool(args: RegisterSessionArgs) {
   const { sessionKey, agentFrom, metadata = {} } = args;
+  const startTime = Date.now();
 
   try {
     // Check if session already exists
     const existingSession = await db.getSession(sessionKey);
     if (existingSession) {
+      const executionTime = Date.now() - startTime;
+      
+      // Log session creation attempt with existing session
+      structuredLogger.logToolCall({
+        timestamp: new Date(),
+        toolName: 'registerSession',
+        executionTimeMs: executionTime,
+        success: false,
+        sessionId: existingSession.id,
+        inputParameters: { sessionKey, agentFrom },
+        errorMessage: 'Session already exists',
+        metadata: { existingSessionStatus: existingSession.status }
+      });
+
       return {
         content: [
           {
