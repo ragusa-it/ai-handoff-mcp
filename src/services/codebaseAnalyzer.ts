@@ -208,7 +208,7 @@ class CodebaseAnalyzerService {
     result.functions = (functionMatches || []).map(match => {
         const nameMatch = match.match(/(?:function|const|def)\s+(\w+)/);
         return nameMatch ? nameMatch[1] : null;
-    }).filter(name => name && name.trim() !== '');
+    }).filter((name): name is string => name !== null && name.trim() !== '');
     result.classes = classMatches || [];
 
     return result;

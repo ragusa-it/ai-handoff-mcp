@@ -245,8 +245,8 @@ export const createTriggers = `
       BEFORE UPDATE ON sessions 
       FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
 `;
-// Enhance
-d monitoring triggers
+
+// Enhanced monitoring triggers
 export const createEnhancedTriggers = `
   -- Function to automatically update last_activity_at when sessions are updated
   CREATE OR REPLACE FUNCTION update_last_activity_at()

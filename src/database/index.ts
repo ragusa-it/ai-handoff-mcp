@@ -192,7 +192,11 @@ export class DatabaseManager {
       createdAt: row.created_at,
       updatedAt: row.updated_at,
       expiresAt: row.expires_at,
-      metadata: row.metadata || {}
+      metadata: row.metadata || {},
+      lastActivityAt: row.last_activity_at || row.created_at,
+      isDormant: row.is_dormant || false,
+      archivedAt: row.archived_at,
+      retentionPolicy: row.retention_policy || 'standard'
     };
   }
 
@@ -204,8 +208,24 @@ export class DatabaseManager {
       contextType: row.context_type,
       content: row.content,
       metadata: row.metadata || {},
-      createdAt: row.created_at
+      createdAt: row.created_at,
+      processingTimeMs: row.processing_time_ms,
+      contentSizeBytes: row.content_size_bytes
     };
+  }
+
+  // Generic query method for direct SQL execution
+  async query<T = any>(text: string, params?: any[]): Promise<{ rows: T[]; rowCount: number }> {
+    const client = await this.pool.connect();
+    try {
+      const result = await client.query(text, params);
+      return {
+        rows: result.rows,
+        rowCount: result.rowCount || 0
+      };
+    } finally {
+      client.release();
+    }
   }
 
   // Health check method

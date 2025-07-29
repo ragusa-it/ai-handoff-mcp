@@ -60,6 +60,24 @@ export async function registerSessionTool(args: RegisterSessionArgs) {
       { action: 'session_registered', ...metadata }
     );
 
+    const executionTime = Date.now() - startTime;
+
+    // Log successful session creation
+    structuredLogger.logToolCall({
+      timestamp: new Date(),
+      toolName: 'registerSession',
+      executionTimeMs: executionTime,
+      success: true,
+      sessionId: session.id,
+      inputParameters: { sessionKey, agentFrom },
+      outputData: {
+        sessionId: session.id,
+        status: session.status,
+        createdAt: session.createdAt
+      },
+      metadata: { metadataKeys: Object.keys(metadata) }
+    });
+
     return {
       content: [
         {
@@ -80,7 +98,28 @@ export async function registerSessionTool(args: RegisterSessionArgs) {
       ]
     };
   } catch (error) {
-    console.error('Error registering session:', error);
+    const executionTime = Date.now() - startTime;
+    
+    // Log error with structured logging
+    structuredLogger.logError(error instanceof Error ? error : new Error('Unknown error'), {
+      timestamp: new Date(),
+      errorType: 'SystemError',
+      component: 'registerSession',
+      operation: 'session_creation',
+      sessionId: sessionKey,
+      additionalInfo: { sessionKey, agentFrom }
+    });
+
+    // Log tool call failure
+    structuredLogger.logToolCall({
+      timestamp: new Date(),
+      toolName: 'registerSession',
+      executionTimeMs: executionTime,
+      success: false,
+      inputParameters: { sessionKey, agentFrom },
+      errorMessage: error instanceof Error ? error.message : 'Unknown error'
+    });
+
     return {
       content: [
         {

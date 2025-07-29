@@ -1,5 +1,6 @@
 import { db } from '../../database/index.js';
 import { contextManagerService } from '../../services/contextManager.js';
+import { structuredLogger } from '../../services/structuredLogger.js';
 
 export interface RequestHandoffArgs {
   sessionKey: string;
@@ -10,11 +11,23 @@ export interface RequestHandoffArgs {
 
 export async function requestHandoffTool(args: RequestHandoffArgs) {
   const { sessionKey, targetAgent, requestType = 'context_transfer', requestData = {} } = args;
+  const startTime = Date.now();
 
   try {
     // Verify session exists and is active
     const session = await db.getSession(sessionKey);
     if (!session) {
+      const executionTime = Date.now() - startTime;
+      
+      structuredLogger.logToolCall({
+        timestamp: new Date(),
+        toolName: 'requestHandoff',
+        executionTimeMs: executionTime,
+        success: false,
+        inputParameters: { sessionKey, targetAgent, requestType },
+        errorMessage: 'Session not found'
+      });
+
       return {
         content: [
           {
@@ -30,6 +43,19 @@ export async function requestHandoffTool(args: RequestHandoffArgs) {
     }
 
     if (session.status !== 'active') {
+      const executionTime = Date.now() - startTime;
+      
+      structuredLogger.logToolCall({
+        timestamp: new Date(),
+        toolName: 'requestHandoff',
+        executionTimeMs: executionTime,
+        success: false,
+        sessionId: session.id,
+        inputParameters: { sessionKey, targetAgent, requestType },
+        errorMessage: 'Session is not active',
+        metadata: { currentStatus: session.status }
+      });
+
       return {
         content: [
           {
@@ -46,9 +72,23 @@ export async function requestHandoffTool(args: RequestHandoffArgs) {
     }
 
     // Get full context for the handoff
+    const contextStartTime = Date.now();
     const fullContext = await contextManagerService.getFullContext(sessionKey);
+    const contextRetrievalTime = Date.now() - contextStartTime;
     
     if (!fullContext) {
+      const executionTime = Date.now() - startTime;
+      
+      structuredLogger.logToolCall({
+        timestamp: new Date(),
+        toolName: 'requestHandoff',
+        executionTimeMs: executionTime,
+        success: false,
+        sessionId: session.id,
+        inputParameters: { sessionKey, targetAgent, requestType },
+        errorMessage: 'Failed to retrieve context for session'
+      });
+
       return {
         content: [
           {
@@ -64,9 +104,12 @@ export async function requestHandoffTool(args: RequestHandoffArgs) {
     }
     
     // Create handoff summary
+    const summaryStartTime = Date.now();
     const handoffSummary = await contextManagerService.createHandoffSummary(sessionKey);
+    const summaryTime = Date.now() - summaryStartTime;
 
     // Update session with target agent
+    const updateStartTime = Date.now();
     await db.updateSession(sessionKey, {
       agentTo: targetAgent,
       status: requestType === 'full_handoff' ? 'completed' : 'active',
@@ -77,6 +120,7 @@ export async function requestHandoffTool(args: RequestHandoffArgs) {
         targetAgent
       }
     });
+    const updateTime = Date.now() - updateStartTime;
 
     // Add context entry for the handoff request
     await db.addContextEntry(
@@ -106,7 +150,72 @@ export async function requestHandoffTool(args: RequestHandoffArgs) {
     };
 
     const cacheKey = `handoff:${targetAgent}:${sessionKey}`;
+    const cacheStartTime = Date.now();
     await db.setCache(cacheKey, handoffPackage, 24 * 3600); // Cache for 24 hours
+    const cacheTime = Date.now() - cacheStartTime;
+
+    const executionTime = Date.now() - startTime;
+    const contextSize = JSON.stringify(fullContext).length;
+
+    // Log successful handoff request
+    structuredLogger.logHandoffEvent({
+      timestamp: new Date(),
+      sessionId: session.id,
+      agentFrom: session.agentFrom,
+      agentTo: targetAgent,
+      handoffType: 'request',
+      contextSize,
+      processingTimeMs: executionTime,
+      success: true,
+      metadata: {
+        requestType,
+        contextEntries: fullContext.contextHistory.length,
+        summaryLength: handoffSummary.summary.length
+      }
+    });
+
+    // Log tool call success
+    structuredLogger.logToolCall({
+      timestamp: new Date(),
+      toolName: 'requestHandoff',
+      executionTimeMs: executionTime,
+      success: true,
+      sessionId: session.id,
+      inputParameters: { sessionKey, targetAgent, requestType },
+      outputData: {
+        handoffType: requestType,
+        contextEntries: fullContext.contextHistory.length,
+        cacheKey
+      },
+      metadata: {
+        contextRetrievalTimeMs: contextRetrievalTime,
+        summaryTimeMs: summaryTime,
+        updateTimeMs: updateTime,
+        cacheTimeMs: cacheTime,
+        contextSizeBytes: contextSize
+      }
+    });
+
+    // Log performance metrics
+    structuredLogger.logPerformanceMetric({
+      timestamp: new Date(),
+      sessionId: session.id,
+      metricName: 'handoff_processing_duration',
+      metricValue: executionTime,
+      metricType: 'timer',
+      unit: 'milliseconds',
+      tags: { requestType, targetAgent, sourceAgent: session.agentFrom }
+    });
+
+    structuredLogger.logPerformanceMetric({
+      timestamp: new Date(),
+      sessionId: session.id,
+      metricName: 'handoff_context_size',
+      metricValue: contextSize,
+      metricType: 'gauge',
+      unit: 'bytes',
+      tags: { requestType, targetAgent }
+    });
 
     return {
       content: [
@@ -141,7 +250,41 @@ export async function requestHandoffTool(args: RequestHandoffArgs) {
       ]
     };
   } catch (error) {
-    console.error('Error processing handoff request:', error);
+    const executionTime = Date.now() - startTime;
+    
+    // Log error with structured logging
+    structuredLogger.logError(error instanceof Error ? error : new Error('Unknown error'), {
+      timestamp: new Date(),
+      errorType: 'SystemError',
+      component: 'requestHandoff',
+      operation: 'handoff_request',
+      sessionId: sessionKey,
+      additionalInfo: { sessionKey, targetAgent, requestType }
+    });
+
+    // Log handoff failure
+    structuredLogger.logHandoffEvent({
+      timestamp: new Date(),
+      sessionId: sessionKey,
+      agentFrom: 'unknown',
+      agentTo: targetAgent,
+      handoffType: 'request',
+      processingTimeMs: executionTime,
+      success: false,
+      reason: error instanceof Error ? error.message : 'Unknown error',
+      metadata: { requestType }
+    });
+
+    // Log tool call failure
+    structuredLogger.logToolCall({
+      timestamp: new Date(),
+      toolName: 'requestHandoff',
+      executionTimeMs: executionTime,
+      success: false,
+      inputParameters: { sessionKey, targetAgent, requestType },
+      errorMessage: error instanceof Error ? error.message : 'Unknown error'
+    });
+
     return {
       content: [
         {
