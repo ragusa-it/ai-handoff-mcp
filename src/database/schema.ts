@@ -250,12 +250,12 @@ export const createTriggers = `
 export const createEnhancedTriggers = `
   -- Function to automatically update last_activity_at when sessions are updated
   CREATE OR REPLACE FUNCTION update_last_activity_at()
-  RETURNS TRIGGER AS $
+  RETURNS TRIGGER AS $$
   BEGIN
       NEW.last_activity_at = NOW();
       RETURN NEW;
   END;
-  $ language 'plpgsql';
+  $$ language 'plpgsql';
 
   -- Trigger to automatically update last_activity_at on session updates
   DROP TRIGGER IF EXISTS update_sessions_last_activity ON sessions;
@@ -265,7 +265,7 @@ export const createEnhancedTriggers = `
 
   -- Function to automatically log session lifecycle events
   CREATE OR REPLACE FUNCTION log_session_lifecycle_event()
-  RETURNS TRIGGER AS $
+  RETURNS TRIGGER AS $$
   BEGIN
       -- Log creation event
       IF TG_OP = 'INSERT' THEN
@@ -312,7 +312,7 @@ export const createEnhancedTriggers = `
       
       RETURN NULL;
   END;
-  $ language 'plpgsql';
+  $$ language 'plpgsql';
 
   -- Trigger to automatically log session lifecycle events
   DROP TRIGGER IF EXISTS log_session_lifecycle ON sessions;

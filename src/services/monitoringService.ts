@@ -104,6 +104,11 @@ export interface IMonitoringService {
   getPrometheusMetrics(): string;
   getSystemMetrics(): Promise<SystemMetrics>;
   
+  // Historical analysis and aggregation
+  getMetricsAggregation(metricName: string, timeRange: { start: Date; end: Date }, aggregationType: 'avg' | 'sum' | 'count' | 'min' | 'max'): Promise<number>;
+  getPerformanceTrends(operation: string, timeRange: { start: Date; end: Date }): Promise<Array<{ timestamp: Date; avgDuration: number; successRate: number }>>;
+  storeMetricsAggregation(aggregationType: string, timeBucket: Date, aggregationData: Record<string, any>): Promise<void>;
+  
   // Configuration and lifecycle
   updateConfig(config: Partial<MonitoringConfig>): void;
   start(): Promise<void>;
@@ -774,16 +779,45 @@ export class MonitoringService implements IMonitoringService {
         lines.push(`database_query_duration_seconds ${avgDuration} ${timestamp}`);
       }
 
+      // Redis metrics
+      lines.push('# HELP redis_operations_total Total number of Redis operations');
+      lines.push('# TYPE redis_operations_total counter');
+      for (const [operation, metrics] of this.metrics.redisOperations) {
+        lines.push(`redis_operations_total{operation="${operation}"} ${metrics.count} ${timestamp}`);
+      }
+
+      lines.push('# HELP redis_operation_duration_seconds Redis operation duration in seconds');
+      lines.push('# TYPE redis_operation_duration_seconds histogram');
+      for (const [operation, metrics] of this.metrics.redisOperations) {
+        const avgDuration = metrics.totalDuration / metrics.count / 1000; // Convert to seconds
+        lines.push(`redis_operation_duration_seconds{operation="${operation}"} ${avgDuration} ${timestamp}`);
+      }
+
+      lines.push('# HELP redis_operation_errors_total Total number of Redis operation errors');
+      lines.push('# TYPE redis_operation_errors_total counter');
+      for (const [operation, metrics] of this.metrics.redisOperations) {
+        lines.push(`redis_operation_errors_total{operation="${operation}"} ${metrics.errors} ${timestamp}`);
+      }
+
       // System metrics
       lines.push('# HELP system_memory_usage_bytes Current memory usage in bytes');
       lines.push('# TYPE system_memory_usage_bytes gauge');
       const memoryUsage = process.memoryUsage();
       lines.push(`system_memory_usage_bytes ${memoryUsage.heapUsed} ${timestamp}`);
 
+      lines.push('# HELP system_memory_usage_percentage Current memory usage percentage');
+      lines.push('# TYPE system_memory_usage_percentage gauge');
+      const memoryPercentage = (memoryUsage.heapUsed / memoryUsage.heapTotal) * 100;
+      lines.push(`system_memory_usage_percentage ${memoryPercentage} ${timestamp}`);
+
       lines.push('# HELP system_uptime_seconds System uptime in seconds');
       lines.push('# TYPE system_uptime_seconds counter');
       const uptime = (Date.now() - this.startTime.getTime()) / 1000;
       lines.push(`system_uptime_seconds ${uptime} ${timestamp}`);
+
+      lines.push('# HELP active_sessions_total Current number of active sessions');
+      lines.push('# TYPE active_sessions_total gauge');
+      lines.push(`active_sessions_total ${this.metrics.systemMetrics.activeSessions} ${timestamp}`);
 
       return lines.join('\n') + '\n';
     } catch (error) {
@@ -927,12 +961,85 @@ export class MonitoringService implements IMonitoringService {
 
       // Store metrics in database
       await this.storeSystemMetrics(metrics);
+
+      // Perform hourly aggregations
+      await this.performHourlyAggregations();
     } catch (error) {
       structuredLogger.logError(error as Error, {
         timestamp: new Date(),
         errorType: 'SystemError',
         component: 'MonitoringService',
         operation: 'collectSystemMetrics'
+      });
+    }
+  }
+
+  /**
+   * Perform hourly aggregations for analytics
+   */
+  private async performHourlyAggregations(): Promise<void> {
+    try {
+      const now = new Date();
+      const hourBucket = new Date(now.getFullYear(), now.getMonth(), now.getDate(), now.getHours());
+      
+      // Check if we already have aggregations for this hour
+      const existingAggregation = await db.query(
+        'SELECT id FROM analytics_aggregations WHERE aggregation_type = $1 AND time_bucket = $2',
+        ['hourly_performance', hourBucket]
+      );
+
+      if (existingAggregation.rows.length > 0) {
+        return; // Already aggregated for this hour
+      }
+
+      // Aggregate performance metrics for the current hour
+      const performanceAggregation = await db.query(`
+        SELECT 
+          operation,
+          COUNT(*) as total_calls,
+          AVG(duration_ms) as avg_duration,
+          MIN(duration_ms) as min_duration,
+          MAX(duration_ms) as max_duration,
+          PERCENTILE_CONT(0.95) WITHIN GROUP (ORDER BY duration_ms) as p95_duration,
+          COUNT(*) FILTER (WHERE success = true) as successful_calls,
+          COUNT(*) FILTER (WHERE success = false) as failed_calls
+        FROM performance_logs 
+        WHERE created_at >= $1 AND created_at < $2
+        GROUP BY operation
+      `, [hourBucket, new Date(hourBucket.getTime() + 60 * 60 * 1000)]);
+
+      const aggregationData = {
+        operations: performanceAggregation.rows.reduce((acc, row) => {
+          acc[row.operation] = {
+            totalCalls: parseInt(row.total_calls),
+            avgDuration: parseFloat(row.avg_duration || '0'),
+            minDuration: parseFloat(row.min_duration || '0'),
+            maxDuration: parseFloat(row.max_duration || '0'),
+            p95Duration: parseFloat(row.p95_duration || '0'),
+            successfulCalls: parseInt(row.successful_calls),
+            failedCalls: parseInt(row.failed_calls),
+            successRate: (parseInt(row.successful_calls) / parseInt(row.total_calls)) * 100
+          };
+          return acc;
+        }, {} as Record<string, any>)
+      };
+
+      // Store the aggregation
+      await this.storeMetricsAggregation('hourly_performance', hourBucket, aggregationData);
+
+      structuredLogger.logSystemEvent({
+        timestamp: new Date(),
+        component: 'MonitoringService',
+        operation: 'performHourlyAggregations',
+        status: 'completed',
+        metadata: { hourBucket: hourBucket.toISOString(), operationsCount: Object.keys(aggregationData.operations).length }
+      });
+    } catch (error) {
+      structuredLogger.logError(error as Error, {
+        timestamp: new Date(),
+        errorType: 'SystemError',
+        component: 'MonitoringService',
+        operation: 'performHourlyAggregations'
       });
     }
   }
@@ -1036,6 +1143,97 @@ export class MonitoringService implements IMonitoringService {
         errorType: 'SystemError',
         component: 'MonitoringService',
         operation: 'storeSystemMetrics'
+      });
+    }
+  }
+
+  /**
+   * Get metrics aggregation for historical analysis
+   */
+  async getMetricsAggregation(
+    metricName: string, 
+    timeRange: { start: Date; end: Date }, 
+    aggregationType: 'avg' | 'sum' | 'count' | 'min' | 'max'
+  ): Promise<number> {
+    try {
+      const query = `
+        SELECT ${aggregationType}(metric_value) as result
+        FROM system_metrics 
+        WHERE metric_name = $1 
+        AND recorded_at BETWEEN $2 AND $3
+      `;
+      
+      const result = await db.query(query, [metricName, timeRange.start, timeRange.end]);
+      return parseFloat(result.rows[0]?.result || '0');
+    } catch (error) {
+      structuredLogger.logError(error as Error, {
+        timestamp: new Date(),
+        errorType: 'SystemError',
+        component: 'MonitoringService',
+        operation: 'getMetricsAggregation'
+      });
+      return 0;
+    }
+  }
+
+  /**
+   * Get performance trends for a specific operation
+   */
+  async getPerformanceTrends(
+    operation: string, 
+    timeRange: { start: Date; end: Date }
+  ): Promise<Array<{ timestamp: Date; avgDuration: number; successRate: number }>> {
+    try {
+      const query = `
+        SELECT 
+          DATE_TRUNC('hour', created_at) as timestamp,
+          AVG(duration_ms) as avg_duration,
+          (COUNT(*) FILTER (WHERE success = true) * 100.0 / COUNT(*)) as success_rate
+        FROM performance_logs 
+        WHERE operation = $1 
+        AND created_at BETWEEN $2 AND $3
+        GROUP BY DATE_TRUNC('hour', created_at)
+        ORDER BY timestamp ASC
+      `;
+      
+      const result = await db.query(query, [operation, timeRange.start, timeRange.end]);
+      return result.rows
+        .filter(row => row.timestamp) // Filter out rows with null timestamps
+        .map(row => ({
+          timestamp: row.timestamp,
+          avgDuration: parseFloat(row.avg_duration || '0'),
+          successRate: parseFloat(row.success_rate || '0')
+        }));
+    } catch (error) {
+      structuredLogger.logError(error as Error, {
+        timestamp: new Date(),
+        errorType: 'SystemError',
+        component: 'MonitoringService',
+        operation: 'getPerformanceTrends'
+      });
+      return [];
+    }
+  }
+
+  /**
+   * Store metrics aggregation for analytics
+   */
+  async storeMetricsAggregation(
+    aggregationType: string, 
+    timeBucket: Date, 
+    aggregationData: Record<string, any>
+  ): Promise<void> {
+    try {
+      await db.query(
+        'INSERT INTO analytics_aggregations (aggregation_type, time_bucket, aggregation_data) VALUES ($1, $2, $3)',
+        [aggregationType, timeBucket, JSON.stringify(aggregationData)]
+      );
+    } catch (error) {
+      structuredLogger.logError(error as Error, {
+        timestamp: new Date(),
+        errorType: 'SystemError',
+        component: 'MonitoringService',
+        operation: 'storeMetricsAggregation'
       });
     }
   }

@@ -237,13 +237,17 @@ describe('MonitoringService', () => {
         duration: 200,
         success: true
       });
+      monitoringService.recordRedisOperation('GET', 10, true);
 
       const prometheusMetrics = monitoringService.getPrometheusMetrics();
 
       expect(prometheusMetrics).toContain('tool_calls_total');
       expect(prometheusMetrics).toContain('handoffs_total');
+      expect(prometheusMetrics).toContain('redis_operations_total');
       expect(prometheusMetrics).toContain('system_memory_usage_bytes');
+      expect(prometheusMetrics).toContain('system_memory_usage_percentage');
       expect(prometheusMetrics).toContain('system_uptime_seconds');
+      expect(prometheusMetrics).toContain('active_sessions_total');
     });
 
     it('should return empty string when Prometheus export is disabled', () => {
@@ -287,6 +291,94 @@ describe('MonitoringService', () => {
       await monitoringService.stop();
       await monitoringService.stop(); // Should not throw or cause issues
       expect(monitoringService['isRunning']).toBe(false);
+    });
+  });
+
+  describe('Historical Analysis and Aggregation', () => {
+    it('should get metrics aggregation', async () => {
+      // Mock database query for aggregation
+      mockDb.query.mockResolvedValueOnce({
+        rows: [{ result: '75.5' }],
+        rowCount: 1
+      });
+
+      const timeRange = {
+        start: new Date('2024-01-01T00:00:00Z'),
+        end: new Date('2024-01-01T23:59:59Z')
+      };
+
+      const result = await monitoringService.getMetricsAggregation('memory_usage_percentage', timeRange, 'avg');
+
+      expect(result).toBe(75.5);
+      expect(mockDb.query).toHaveBeenCalledWith(
+        expect.stringContaining('SELECT avg(metric_value)'),
+        ['memory_usage_percentage', timeRange.start, timeRange.end]
+      );
+    });
+
+    it('should get performance trends', async () => {
+      // Mock database query for performance trends
+      mockDb.query.mockResolvedValueOnce({
+        rows: [
+          {
+            timestamp: new Date('2024-01-01T10:00:00Z'),
+            avg_duration: '150.5',
+            success_rate: '95.2'
+          },
+          {
+            timestamp: new Date('2024-01-01T11:00:00Z'),
+            avg_duration: '175.3',
+            success_rate: '92.8'
+          }
+        ],
+        rowCount: 2
+      });
+
+      const timeRange = {
+        start: new Date('2024-01-01T00:00:00Z'),
+        end: new Date('2024-01-01T23:59:59Z')
+      };
+
+      const trends = await monitoringService.getPerformanceTrends('tool_call', timeRange);
+
+      expect(trends).toHaveLength(2);
+      expect(trends[0].avgDuration).toBe(150.5);
+      expect(trends[0].successRate).toBe(95.2);
+      expect(trends[1].avgDuration).toBe(175.3);
+      expect(trends[1].successRate).toBe(92.8);
+    });
+
+    it('should store metrics aggregation', async () => {
+      const aggregationType = 'hourly_performance';
+      const timeBucket = new Date('2024-01-01T10:00:00Z');
+      const aggregationData = {
+        operations: {
+          'tool_call': { totalCalls: 100, avgDuration: 150, successRate: 95 }
+        }
+      };
+
+      await monitoringService.storeMetricsAggregation(aggregationType, timeBucket, aggregationData);
+
+      expect(mockDb.query).toHaveBeenCalledWith(
+        'INSERT INTO analytics_aggregations (aggregation_type, time_bucket, aggregation_data) VALUES ($1, $2, $3)',
+        [aggregationType, timeBucket, JSON.stringify(aggregationData)]
+      );
+    });
+
+    it('should handle errors in aggregation methods gracefully', async () => {
+      // Mock database error
+      mockDb.query.mockRejectedValueOnce(new Error('Database error'));
+
+      const timeRange = {
+        start: new Date('2024-01-01T00:00:00Z'),
+        end: new Date('2024-01-01T23:59:59Z')
+      };
+
+      const result = await monitoringService.getMetricsAggregation('memory_usage_percentage', timeRange, 'avg');
+      expect(result).toBe(0);
+
+      const trends = await monitoringService.getPerformanceTrends('tool_call', timeRange);
+      expect(trends).toEqual([]);
     });
   });
 
