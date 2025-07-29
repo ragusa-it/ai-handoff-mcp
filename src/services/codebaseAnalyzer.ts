@@ -205,7 +205,10 @@ class CodebaseAnalyzerService {
     const functionMatches = content.match(/function\s+\w+|const\s+\w+\s*=\s*\(|def\s+\w+/g);
     const classMatches = content.match(/class\s+\w+|interface\s+\w+/g);
 
-    result.functions = functionMatches || [];
+    result.functions = (functionMatches || []).map(match => {
+        const nameMatch = match.match(/(?:function|const|def)\s+(\w+)/);
+        return nameMatch ? nameMatch[1] : null;
+    }).filter(Boolean);
     result.classes = classMatches || [];
 
     return result;
