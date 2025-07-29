@@ -6,8 +6,14 @@ import {
   createContextHistoryTable, 
   createCodebaseSnapshotsTable, 
   createHandoffRequestsTable,
+  createSessionLifecycleTable,
+  createSystemMetricsTable,
+  createPerformanceLogsTable,
+  createAnalyticsAggregationsTable,
   createIndexes,
   createTriggers,
+  createEnhancedTriggers,
+  createMonitoringViews,
   type Session,
   type ContextHistoryEntry
 } from './schema.js';
@@ -53,8 +59,17 @@ export class DatabaseManager {
       await client.query(createContextHistoryTable);
       await client.query(createCodebaseSnapshotsTable);
       await client.query(createHandoffRequestsTable);
+      
+      // Enhanced monitoring tables
+      await client.query(createSessionLifecycleTable);
+      await client.query(createSystemMetricsTable);
+      await client.query(createPerformanceLogsTable);
+      await client.query(createAnalyticsAggregationsTable);
+      
       await client.query(createIndexes);
       await client.query(createTriggers);
+      await client.query(createEnhancedTriggers);
+      await client.query(createMonitoringViews);
       
       await client.query('COMMIT');
       console.log('✅ Database schema initialized');
@@ -84,9 +99,19 @@ export class DatabaseManager {
   }
 
   async getSession(sessionKey: string): Promise<Session | null> {
+    // First try to get from active sessions
     const query = 'SELECT * FROM sessions WHERE session_key = $1';
     const result = await this.pool.query(query, [sessionKey]);
-    return result.rows.length > 0 ? this.mapRowToSession(result.rows[0]) : null;
+    
+    if (result.rows.length > 0) {
+      return this.mapRowToSession(result.rows[0]);
+    }
+
+    // If not found in active sessions, check archived cache
+    const archivedCacheKey = `archived_session_by_key:${sessionKey}`;
+    const cachedSession = await this.getCache<Session>(archivedCacheKey);
+    
+    return cachedSession;
   }
 
   async updateSession(sessionKey: string, updates: Partial<Session>): Promise<Session | null> {

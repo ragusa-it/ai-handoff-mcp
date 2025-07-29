@@ -1,6 +1,7 @@
 import { db } from '../../database/index.js';
 import type { ContextHistoryEntry } from '../../database/schema.js';
 import { structuredLogger } from '../../services/structuredLogger.js';
+import { sessionManagerService } from '../../services/sessionManager.js';
 
 export interface UpdateContextArgs {
   sessionKey: string;
@@ -72,7 +73,18 @@ export async function updateContextTool(args: UpdateContextArgs) {
       };
     }
 
-    // Add context entry
+    // Update session last activity timestamp
+    await db.query(
+      'UPDATE sessions SET last_activity_at = NOW(), updated_at = NOW() WHERE id = $1',
+      [session.id]
+    );
+
+    // Reactivate session if it was dormant
+    if (session.isDormant) {
+      await sessionManagerService.reactivateSession(session.id);
+    }
+
+    // Add context entry with processing time and content size
     const contextEntry = await db.addContextEntry(
       session.id,
       contextType,
@@ -81,6 +93,12 @@ export async function updateContextTool(args: UpdateContextArgs) {
         timestamp: new Date().toISOString(),
         ...metadata
       }
+    );
+
+    // Update context entry with performance metrics
+    await db.query(
+      'UPDATE context_history SET processing_time_ms = $1, content_size_bytes = $2 WHERE id = $3',
+      [executionTime, contentSize, contextEntry.id]
     );
 
     // Cache the latest context for quick access

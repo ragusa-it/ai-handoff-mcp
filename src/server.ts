@@ -18,6 +18,7 @@ import { updateContextTool } from './mcp/tools/updateContext.js';
 import { requestHandoffTool } from './mcp/tools/requestHandoff.js';
 import { contextManagerService } from './services/contextManager.js';
 import { codebaseAnalyzerService } from './services/codebaseAnalyzer.js';
+import { backgroundJobScheduler } from './services/backgroundJobScheduler.js';
 
 class AIHandoffMCPServer {
   private server: Server;
@@ -144,6 +145,68 @@ class AIHandoffMCPServer {
               },
               required: ['sessionKey', 'filePaths']
             }
+          },
+          {
+            name: 'get_job_status',
+            description: 'Get status and statistics for background jobs',
+            inputSchema: {
+              type: 'object',
+              properties: {
+                jobName: {
+                  type: 'string',
+                  description: 'Optional specific job name to get status for'
+                }
+              }
+            }
+          },
+          {
+            name: 'run_job_now',
+            description: 'Manually trigger a background job to run immediately',
+            inputSchema: {
+              type: 'object',
+              properties: {
+                jobName: {
+                  type: 'string',
+                  description: 'Name of the job to run'
+                }
+              },
+              required: ['jobName']
+            }
+          },
+          {
+            name: 'update_job_config',
+            description: 'Update configuration for a background job',
+            inputSchema: {
+              type: 'object',
+              properties: {
+                jobName: {
+                  type: 'string',
+                  description: 'Name of the job to update'
+                },
+                config: {
+                  type: 'object',
+                  properties: {
+                    intervalMs: {
+                      type: 'number',
+                      description: 'Interval in milliseconds'
+                    },
+                    enabled: {
+                      type: 'boolean',
+                      description: 'Whether the job is enabled'
+                    },
+                    maxRetries: {
+                      type: 'number',
+                      description: 'Maximum number of retries'
+                    },
+                    retryDelayMs: {
+                      type: 'number',
+                      description: 'Delay between retries in milliseconds'
+                    }
+                  }
+                }
+              },
+              required: ['jobName', 'config']
+            }
           }
         ]
       };
@@ -178,6 +241,42 @@ class AIHandoffMCPServer {
               (args as any).analysisType || 'structure'
             );
           
+          case 'get_job_status':
+            const jobName = (args as any).jobName;
+            const status = jobName 
+              ? { [jobName]: backgroundJobScheduler.getJobStatus()[jobName] }
+              : backgroundJobScheduler.getJobStatus();
+            return {
+              content: [
+                {
+                  type: 'text',
+                  text: JSON.stringify(status, null, 2)
+                }
+              ]
+            };
+          
+          case 'run_job_now':
+            const result = await backgroundJobScheduler.runJobNow((args as any).jobName);
+            return {
+              content: [
+                {
+                  type: 'text',
+                  text: `Job executed successfully: ${JSON.stringify(result, null, 2)}`
+                }
+              ]
+            };
+          
+          case 'update_job_config':
+            backgroundJobScheduler.updateJobConfig((args as any).jobName, (args as any).config);
+            return {
+              content: [
+                {
+                  type: 'text',
+                  text: `Job configuration updated for ${(args as any).jobName}`
+                }
+              ]
+            };
+          
           default:
             throw new McpError(
               ErrorCode.MethodNotFound,
@@ -211,6 +310,18 @@ class AIHandoffMCPServer {
             uri: 'handoff://context/{sessionKey}',
             name: 'Session Context',
             description: 'Complete context history for a session',
+            mimeType: 'application/json'
+          },
+          {
+            uri: 'handoff://jobs',
+            name: 'Background Jobs',
+            description: 'Status and statistics for all background jobs',
+            mimeType: 'application/json'
+          },
+          {
+            uri: 'handoff://jobs/{jobName}',
+            name: 'Job Details',
+            description: 'Detailed information for a specific background job',
             mimeType: 'application/json'
           }
         ]
@@ -249,6 +360,43 @@ class AIHandoffMCPServer {
         };
       }
 
+      if (uri === 'handoff://jobs') {
+        const jobStatus = backgroundJobScheduler.getJobStatus();
+        
+        return {
+          contents: [
+            {
+              uri,
+              mimeType: 'application/json',
+              text: JSON.stringify(jobStatus, null, 2)
+            }
+          ]
+        };
+      }
+
+      if (uri.startsWith('handoff://jobs/')) {
+        const jobName = uri.replace('handoff://jobs/', '');
+        const jobStatus = backgroundJobScheduler.getJobStatus();
+        const jobDetails = jobStatus[jobName];
+        
+        if (!jobDetails) {
+          throw new McpError(
+            ErrorCode.InvalidRequest,
+            `Job not found: ${jobName}`
+          );
+        }
+        
+        return {
+          contents: [
+            {
+              uri,
+              mimeType: 'application/json',
+              text: JSON.stringify(jobDetails, null, 2)
+            }
+          ]
+        };
+      }
+
       throw new McpError(
         ErrorCode.InvalidRequest,
         `Unknown resource: ${uri}`
@@ -259,6 +407,9 @@ class AIHandoffMCPServer {
   async start() {
     // Initialize database
     await db.initialize();
+    
+    // Start background job scheduler
+    await backgroundJobScheduler.startAllJobs();
     
     // Create transport and connect
     const transport = new StdioServerTransport();
@@ -273,12 +424,14 @@ class AIHandoffMCPServer {
 // Handle graceful shutdown
 process.on('SIGINT', async () => {
   console.log('🛑 Shutting down server...');
+  await backgroundJobScheduler.stopAllJobs();
   await db.close();
   process.exit(0);
 });
 
 process.on('SIGTERM', async () => {
   console.log('🛑 Shutting down server...');
+  await backgroundJobScheduler.stopAllJobs();
   await db.close();
   process.exit(0);
 });

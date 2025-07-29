@@ -24,9 +24,9 @@
     - Add error logging with stack traces and context to all tool handlers
     - _Requirements: 2.1, 2.2, 2.5_
 
-- [ ] 3. Create session lifecycle management service
+- [-] 3. Create session lifecycle management service
 
-  - [ ] 3.1 Implement SessionManagerService class
+  - [x] 3.1 Implement SessionManagerService class
 
     - Write core session lifecycle methods (scheduleExpiration, expireSession, archiveSession)
     - Implement session cleanup methods for orphaned and expired sessions
@@ -34,7 +34,7 @@
     - Create retention policy configuration and enforcement
     - _Requirements: 1.1, 1.2, 1.3, 1.5, 6.1, 6.2_
 
-  - [ ] 3.2 Add background job scheduler for session management
+  - [x] 3.2 Add background job scheduler for session management
 
     - Implement background task scheduler using Node.js timers or job queue
     - Create scheduled jobs for session expiration checks and cleanup
@@ -42,7 +42,7 @@
     - Implement retention policy enforcement job
     - _Requirements: 1.1, 1.2, 1.3, 6.2_
 
-  - [ ] 3.3 Integrate session manager with existing session operations
+  - [-] 3.3 Integrate session manager with existing session operations
     - Modify existing session creation to set expiration times and schedule cleanup
     - Update session update operations to track last activity timestamps
     - Add session archival logic to maintain read-only access to historical data
