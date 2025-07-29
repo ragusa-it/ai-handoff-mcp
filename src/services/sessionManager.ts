@@ -1,5 +1,8 @@
-import { db } from '../database/index.js';
+import { monitoredDb } from '../database/monitoredDatabase.js';
 import type { Session } from '../database/schema.js';
+import { monitoringService } from './monitoringService.js';
+import { structuredLogger } from './structuredLogger.js';
+import { PerformanceTimer } from '../mcp/utils/performance.js';
 
 export interface RetentionPolicy {
   name: string;
@@ -73,22 +76,36 @@ class SessionManagerService {
    * Schedule session expiration based on retention policy
    */
   async scheduleExpiration(sessionId: string, customExpiresAt?: Date): Promise<void> {
+    const timer = new PerformanceTimer();
+    const operationId = `schedule_expiration_${Date.now()}`;
+
     try {
+      structuredLogger.logSystemEvent({
+        timestamp: new Date(),
+        component: 'SessionManager',
+        operation: 'schedule_expiration_start',
+        status: 'started',
+        metadata: { operationId, sessionId }
+      });
+
       const session = await this.getSessionById(sessionId);
       if (!session) {
         throw new Error(`Session ${sessionId} not found`);
       }
+      timer.checkpoint('session_retrieved');
 
       const policy = this.retentionPolicies.get(session.retentionPolicy) || this.config.defaultRetentionPolicy;
       
       // Calculate expiration time
       const expiresAt = customExpiresAt || new Date(Date.now() + policy.activeSessionTtl * 60 * 60 * 1000);
+      timer.checkpoint('expiration_calculated');
 
       // Update session with expiration time
-      await db.query(
+      await monitoredDb.query(
         'UPDATE sessions SET expires_at = $1 WHERE id = $2',
         [expiresAt, sessionId]
       );
+      timer.checkpoint('session_updated');
 
       // Log the scheduling event
       await this.logLifecycleEvent(sessionId, 'expiration_scheduled', {
@@ -96,10 +113,57 @@ class SessionManagerService {
         retention_policy: policy.name,
         ttl_hours: policy.activeSessionTtl
       });
+      timer.checkpoint('lifecycle_logged');
+
+      const duration = timer.getElapsed();
+
+      // Record performance metrics
+      monitoringService.recordPerformanceMetrics('schedule_expiration', {
+        operation: 'schedule_expiration',
+        duration,
+        success: true,
+        metadata: {
+          sessionId,
+          retentionPolicy: policy.name,
+          ttlHours: policy.activeSessionTtl
+        }
+      });
+
+      structuredLogger.logSystemEvent({
+        timestamp: new Date(),
+        component: 'SessionManager',
+        operation: 'schedule_expiration_complete',
+        status: 'completed',
+        metadata: {
+          operationId,
+          sessionId,
+          durationMs: duration,
+          expiresAt: expiresAt.toISOString(),
+          retentionPolicy: policy.name
+        }
+      });
 
       console.log(`Session ${sessionId} scheduled for expiration at ${expiresAt}`);
     } catch (error) {
-      console.error(`Error scheduling expiration for session ${sessionId}:`, error);
+      const duration = timer.getElapsed();
+
+      // Record error metrics
+      monitoringService.recordPerformanceMetrics('schedule_expiration', {
+        operation: 'schedule_expiration',
+        duration,
+        success: false,
+        metadata: { sessionId, error: (error as Error).message }
+      });
+
+      // Log error
+      structuredLogger.logError(error as Error, {
+        timestamp: new Date(),
+        errorType: 'ServiceError',
+        component: 'SessionManager',
+        operation: 'schedule_expiration',
+        additionalInfo: { operationId, sessionId, durationMs: duration }
+      });
+
       throw error;
     }
   }
@@ -120,7 +184,7 @@ class SessionManagerService {
       }
 
       // Update session status to expired
-      await db.query(
+      await monitoredDb.query(
         'UPDATE sessions SET status = $1, updated_at = NOW() WHERE id = $2',
         ['expired', sessionId]
       );
@@ -164,7 +228,7 @@ class SessionManagerService {
       const archivedAt = new Date();
 
       // Update session with archived timestamp
-      await db.query(
+      await monitoredDb.query(
         'UPDATE sessions SET archived_at = $1, is_dormant = true, updated_at = NOW() WHERE id = $2',
         [archivedAt, sessionId]
       );
@@ -179,8 +243,8 @@ class SessionManagerService {
       };
       
       // Cache for 7 days by default
-      await db.setCache(cacheKey, sessionData, 7 * 24 * 60 * 60);
-      await db.setCache(cacheKeyBySessionKey, sessionData, 7 * 24 * 60 * 60);
+      await monitoredDb.setCache(cacheKey, sessionData, 7 * 24 * 60 * 60);
+      await monitoredDb.setCache(cacheKeyBySessionKey, sessionData, 7 * 24 * 60 * 60);
 
       // Ensure referential integrity (don't fail the operation if this fails)
       try {
@@ -226,7 +290,7 @@ class SessionManagerService {
           AND ch.id IS NULL
       `;
 
-      const orphanedResult = await db.query(orphanedQuery);
+      const orphanedResult = await monitoredDb.query(orphanedQuery);
       
       for (const session of orphanedResult.rows) {
         try {
@@ -249,7 +313,7 @@ class SessionManagerService {
           AND status NOT IN ('expired', 'archived')
       `;
 
-      const expiredResult = await db.query(expiredQuery);
+      const expiredResult = await monitoredDb.query(expiredQuery);
       
       for (const session of expiredResult.rows) {
         try {
@@ -286,7 +350,7 @@ class SessionManagerService {
       }
 
       // Update session to dormant status
-      await db.query(
+      await monitoredDb.query(
         'UPDATE sessions SET is_dormant = true, updated_at = NOW() WHERE id = $1',
         [sessionId]
       );
@@ -295,11 +359,11 @@ class SessionManagerService {
       const cacheKey = `session:${sessionId}`;
       const dormantCacheKey = `dormant_session:${sessionId}`;
       
-      const cachedData = await db.getCache(cacheKey);
+      const cachedData = await monitoredDb.getCache(cacheKey);
       if (cachedData) {
         // Move to dormant cache with longer TTL but lower priority
-        await db.setCache(dormantCacheKey, cachedData, 24 * 60 * 60); // 24 hours
-        await db.deleteCache(cacheKey);
+        await monitoredDb.setCache(dormantCacheKey, cachedData, 24 * 60 * 60); // 24 hours
+        await monitoredDb.deleteCache(cacheKey);
       }
 
       // Log the dormant event
@@ -331,7 +395,7 @@ class SessionManagerService {
       }
 
       // Update session to active status
-      await db.query(
+      await monitoredDb.query(
         'UPDATE sessions SET is_dormant = false, last_activity_at = NOW(), updated_at = NOW() WHERE id = $1',
         [sessionId]
       );
@@ -340,11 +404,11 @@ class SessionManagerService {
       const dormantCacheKey = `dormant_session:${sessionId}`;
       const cacheKey = `session:${sessionId}`;
       
-      const cachedData = await db.getCache(dormantCacheKey);
+      const cachedData = await monitoredDb.getCache(dormantCacheKey);
       if (cachedData) {
         // Move to active cache with shorter TTL but higher priority
-        await db.setCache(cacheKey, { ...cachedData, isDormant: false }, 4 * 60 * 60); // 4 hours
-        await db.deleteCache(dormantCacheKey);
+        await monitoredDb.setCache(cacheKey, { ...cachedData, isDormant: false }, 4 * 60 * 60); // 4 hours
+        await monitoredDb.deleteCache(dormantCacheKey);
       }
 
       // Log the reactivation event
@@ -414,7 +478,7 @@ class SessionManagerService {
             AND last_activity_at < $2
         `;
 
-        const result = await db.query(dormantQuery, [policy.name, thresholdTime]);
+        const result = await monitoredDb.query(dormantQuery, [policy.name, thresholdTime]);
         
         for (const session of result.rows) {
           try {
@@ -450,19 +514,19 @@ class SessionManagerService {
       };
 
       // Count expired sessions
-      const expiredResult = await db.query(
+      const expiredResult = await monitoredDb.query(
         "SELECT COUNT(*) as count FROM sessions WHERE status = 'expired'"
       );
       stats.expiredSessions = parseInt(expiredResult.rows[0].count);
 
       // Count archived sessions
-      const archivedResult = await db.query(
+      const archivedResult = await monitoredDb.query(
         'SELECT COUNT(*) as count FROM sessions WHERE archived_at IS NOT NULL'
       );
       stats.archivedSessions = parseInt(archivedResult.rows[0].count);
 
       // Count potential orphaned sessions
-      const orphanedResult = await db.query(`
+      const orphanedResult = await monitoredDb.query(`
         SELECT COUNT(*) as count
         FROM sessions s
         LEFT JOIN context_history ch ON s.id = ch.session_id
@@ -484,7 +548,7 @@ class SessionManagerService {
    */
   private async getSessionById(sessionId: string): Promise<Session | null> {
     try {
-      const result = await db.query('SELECT * FROM sessions WHERE id = $1', [sessionId]);
+      const result = await monitoredDb.query('SELECT * FROM sessions WHERE id = $1', [sessionId]);
       if (result.rows.length === 0) {
         return null;
       }
@@ -516,7 +580,7 @@ class SessionManagerService {
    */
   async ensureReferentialIntegrity(sessionId: string): Promise<void> {
     try {
-      await db.query('BEGIN');
+      await monitoredDb.query('BEGIN');
       
       try {
         // Check for orphaned context entries
@@ -526,7 +590,7 @@ class SessionManagerService {
           LEFT JOIN sessions s ON ch.session_id = s.id
           WHERE ch.session_id = $1 AND s.id IS NULL
         `;
-        const orphanedResult = await db.query(orphanedContextQuery, [sessionId]);
+        const orphanedResult = await monitoredDb.query(orphanedContextQuery, [sessionId]);
         
         if (parseInt(orphanedResult.rows[0].count) > 0) {
           console.warn(`Found orphaned context entries for session ${sessionId}`);
@@ -539,7 +603,7 @@ class SessionManagerService {
           LEFT JOIN sessions s ON sl.session_id = s.id
           WHERE sl.session_id = $1 AND s.id IS NULL
         `;
-        const orphanedLifecycleResult = await db.query(orphanedLifecycleQuery, [sessionId]);
+        const orphanedLifecycleResult = await monitoredDb.query(orphanedLifecycleQuery, [sessionId]);
         
         if (parseInt(orphanedLifecycleResult.rows[0].count) > 0) {
           console.warn(`Found orphaned lifecycle events for session ${sessionId}`);
@@ -552,15 +616,15 @@ class SessionManagerService {
           LEFT JOIN sessions s ON pl.session_id = s.id
           WHERE pl.session_id = $1 AND s.id IS NULL
         `;
-        const orphanedPerformanceResult = await db.query(orphanedPerformanceQuery, [sessionId]);
+        const orphanedPerformanceResult = await monitoredDb.query(orphanedPerformanceQuery, [sessionId]);
         
         if (parseInt(orphanedPerformanceResult.rows[0].count) > 0) {
           console.warn(`Found orphaned performance logs for session ${sessionId}`);
         }
 
-        await db.query('COMMIT');
+        await monitoredDb.query('COMMIT');
       } catch (error) {
-        await db.query('ROLLBACK');
+        await monitoredDb.query('ROLLBACK');
         throw error;
       }
     } catch (error) {
@@ -574,7 +638,7 @@ class SessionManagerService {
    */
   private async logLifecycleEvent(sessionId: string, eventType: string, eventData: Record<string, any>): Promise<void> {
     try {
-      await db.query(
+      await monitoredDb.query(
         'INSERT INTO session_lifecycle (session_id, event_type, event_data) VALUES ($1, $2, $3)',
         [sessionId, eventType, JSON.stringify(eventData)]
       );

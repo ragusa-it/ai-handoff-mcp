@@ -1,7 +1,8 @@
-import { db } from '../../database/index.js';
+import { monitoredDb } from '../../database/monitoredDatabase.js';
 import type { ContextHistoryEntry } from '../../database/schema.js';
 import { structuredLogger } from '../../services/structuredLogger.js';
 import { sessionManagerService } from '../../services/sessionManager.js';
+import { monitoredToolWrapper } from '../utils/monitoredToolWrapper.js';
 
 export interface UpdateContextArgs {
   sessionKey: string;
@@ -10,26 +11,15 @@ export interface UpdateContextArgs {
   metadata?: Record<string, any>;
 }
 
-export async function updateContextTool(args: UpdateContextArgs) {
+// Internal implementation without monitoring wrapper
+async function _updateContextTool(args: UpdateContextArgs) {
   const { sessionKey, contextType, content, metadata = {} } = args;
-  const startTime = Date.now();
   const contentSize = Buffer.byteLength(content, 'utf8');
 
   try {
     // Verify session exists and is active
-    const session = await db.getSession(sessionKey);
+    const session = await monitoredDb.getSession(sessionKey);
     if (!session) {
-      const executionTime = Date.now() - startTime;
-      
-      structuredLogger.logToolCall({
-        timestamp: new Date(),
-        toolName: 'updateContext',
-        executionTimeMs: executionTime,
-        success: false,
-        inputParameters: { sessionKey, contextType, contentSize },
-        errorMessage: 'Session not found'
-      });
-
       return {
         content: [
           {
@@ -45,19 +35,6 @@ export async function updateContextTool(args: UpdateContextArgs) {
     }
 
     if (session.status !== 'active') {
-      const executionTime = Date.now() - startTime;
-      
-      structuredLogger.logToolCall({
-        timestamp: new Date(),
-        toolName: 'updateContext',
-        executionTimeMs: executionTime,
-        success: false,
-        sessionId: session.id,
-        inputParameters: { sessionKey, contextType, contentSize },
-        errorMessage: 'Session is not active',
-        metadata: { currentStatus: session.status }
-      });
-
       return {
         content: [
           {
@@ -74,7 +51,7 @@ export async function updateContextTool(args: UpdateContextArgs) {
     }
 
     // Update session last activity timestamp
-    await db.query(
+    await monitoredDb.query(
       'UPDATE sessions SET last_activity_at = NOW(), updated_at = NOW() WHERE id = $1',
       [session.id]
     );
@@ -85,7 +62,7 @@ export async function updateContextTool(args: UpdateContextArgs) {
     }
 
     // Add context entry with processing time and content size
-    const contextEntry = await db.addContextEntry(
+    const contextEntry = await monitoredDb.addContextEntry(
       session.id,
       contextType,
       content,
@@ -97,63 +74,18 @@ export async function updateContextTool(args: UpdateContextArgs) {
 
     // Cache the latest context for quick access
     const cacheKey = `session:${sessionKey}:latest_context`;
-    const cacheStartTime = Date.now();
-    await db.setCache(cacheKey, {
+    await monitoredDb.setCache(cacheKey, {
       lastUpdate: contextEntry.createdAt,
       contextType,
       sequenceNumber: contextEntry.sequenceNumber,
       preview: content.substring(0, 200) + (content.length > 200 ? '...' : '')
     }, 3600); // Cache for 1 hour
-    const cacheTime = Date.now() - cacheStartTime;
-
-    const executionTime = Date.now() - startTime;
 
     // Update context entry with performance metrics
-    await db.query(
-      'UPDATE context_history SET processing_time_ms = $1, content_size_bytes = $2 WHERE id = $3',
-      [executionTime, contentSize, contextEntry.id]
+    await monitoredDb.query(
+      'UPDATE context_history SET content_size_bytes = $1 WHERE id = $2',
+      [contentSize, contextEntry.id]
     );
-
-    // Log successful context update with performance metrics
-    structuredLogger.logToolCall({
-      timestamp: new Date(),
-      toolName: 'updateContext',
-      executionTimeMs: executionTime,
-      success: true,
-      sessionId: session.id,
-      inputParameters: { sessionKey, contextType, contentSize },
-      outputData: {
-        contextEntryId: contextEntry.id,
-        sequenceNumber: contextEntry.sequenceNumber,
-        contentLength: content.length
-      },
-      metadata: {
-        cacheTimeMs: cacheTime,
-        contextType,
-        metadataKeys: Object.keys(metadata)
-      }
-    });
-
-    // Log performance metrics for context update
-    structuredLogger.logPerformanceMetric({
-      timestamp: new Date(),
-      sessionId: session.id,
-      metricName: 'context_update_duration',
-      metricValue: executionTime,
-      metricType: 'timer',
-      unit: 'milliseconds',
-      tags: { contextType, sessionKey }
-    });
-
-    structuredLogger.logPerformanceMetric({
-      timestamp: new Date(),
-      sessionId: session.id,
-      metricName: 'context_content_size',
-      metricValue: contentSize,
-      metricType: 'gauge',
-      unit: 'bytes',
-      tags: { contextType, sessionKey }
-    });
 
     return {
       content: [
@@ -179,8 +111,6 @@ export async function updateContextTool(args: UpdateContextArgs) {
       ]
     };
   } catch (error) {
-    const executionTime = Date.now() - startTime;
-    
     // Log error with structured logging
     structuredLogger.logError(error instanceof Error ? error : new Error('Unknown error'), {
       timestamp: new Date(),
@@ -189,16 +119,6 @@ export async function updateContextTool(args: UpdateContextArgs) {
       operation: 'context_update',
       sessionId: sessionKey,
       additionalInfo: { sessionKey, contextType, contentSize }
-    });
-
-    // Log tool call failure
-    structuredLogger.logToolCall({
-      timestamp: new Date(),
-      toolName: 'updateContext',
-      executionTimeMs: executionTime,
-      success: false,
-      inputParameters: { sessionKey, contextType, contentSize },
-      errorMessage: error instanceof Error ? error.message : 'Unknown error'
     });
 
     return {
@@ -215,3 +135,9 @@ export async function updateContextTool(args: UpdateContextArgs) {
     };
   }
 }
+
+// Export monitored version
+export const updateContextTool = monitoredToolWrapper.wrapTool(
+  'updateContext',
+  _updateContextTool
+);

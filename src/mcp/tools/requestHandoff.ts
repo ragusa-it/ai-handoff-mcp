@@ -1,7 +1,9 @@
-import { db } from '../../database/index.js';
+import { monitoredDb } from '../../database/monitoredDatabase.js';
 import { contextManagerService } from '../../services/contextManager.js';
 import { structuredLogger } from '../../services/structuredLogger.js';
 import { sessionManagerService } from '../../services/sessionManager.js';
+import { monitoredToolWrapper } from '../utils/monitoredToolWrapper.js';
+import { monitoringService } from '../../services/monitoringService.js';
 
 export interface RequestHandoffArgs {
   sessionKey: string;
@@ -10,13 +12,14 @@ export interface RequestHandoffArgs {
   requestData?: Record<string, any>;
 }
 
-export async function requestHandoffTool(args: RequestHandoffArgs) {
+// Internal implementation without monitoring wrapper
+async function _requestHandoffTool(args: RequestHandoffArgs) {
   const { sessionKey, targetAgent, requestType = 'context_transfer', requestData = {} } = args;
   const startTime = Date.now();
 
   try {
     // Verify session exists and is active
-    const session = await db.getSession(sessionKey);
+    const session = await monitoredDb.getSession(sessionKey);
     if (!session) {
       const executionTime = Date.now() - startTime;
       
@@ -111,7 +114,7 @@ export async function requestHandoffTool(args: RequestHandoffArgs) {
 
     // Update session with target agent and track activity
     const updateStartTime = Date.now();
-    await db.updateSession(sessionKey, {
+    await monitoredDb.updateSession(sessionKey, {
       agentTo: targetAgent,
       status: requestType === 'full_handoff' ? 'completed' : 'active',
       lastActivityAt: new Date(),
@@ -130,7 +133,7 @@ export async function requestHandoffTool(args: RequestHandoffArgs) {
     }
 
     // Add context entry for the handoff request
-    await db.addContextEntry(
+    await monitoredDb.addContextEntry(
       session.id,
       'system',
       `Handoff requested to agent: ${targetAgent}`,
@@ -158,11 +161,21 @@ export async function requestHandoffTool(args: RequestHandoffArgs) {
 
     const cacheKey = `handoff:${targetAgent}:${sessionKey}`;
     const cacheStartTime = Date.now();
-    await db.setCache(cacheKey, handoffPackage, 24 * 3600); // Cache for 24 hours
+    await monitoredDb.setCache(cacheKey, handoffPackage, 24 * 3600); // Cache for 24 hours
     const cacheTime = Date.now() - cacheStartTime;
 
     const executionTime = Date.now() - startTime;
     const contextSize = JSON.stringify(fullContext).length;
+
+    // Record handoff metrics
+    monitoringService.recordHandoffMetrics(session.id, {
+      sessionId: session.id,
+      agentFrom: session.agentFrom,
+      agentTo: targetAgent,
+      duration: executionTime,
+      success: true,
+      contextSize
+    });
 
     // Log successful handoff request
     structuredLogger.logHandoffEvent({
@@ -306,3 +319,9 @@ export async function requestHandoffTool(args: RequestHandoffArgs) {
     };
   }
 }
+
+// Export monitored version
+export const requestHandoffTool = monitoredToolWrapper.wrapTool(
+  'requestHandoff',
+  _requestHandoffTool
+);

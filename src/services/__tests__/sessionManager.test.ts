@@ -1,9 +1,9 @@
 import { SessionManagerService, type RetentionPolicy } from '../sessionManager.js';
-import { db } from '../../database/index.js';
+import { monitoredDb } from '../../database/monitoredDatabase.js';
 
-// Mock the database
-jest.mock('../../database/index.js', () => ({
-  db: {
+// Mock the monitored database
+jest.mock('../../database/monitoredDatabase.js', () => ({
+  monitoredDb: {
     query: jest.fn(),
     getCache: jest.fn(),
     setCache: jest.fn(),
@@ -13,7 +13,7 @@ jest.mock('../../database/index.js', () => ({
 
 describe('SessionManagerService', () => {
   let sessionManager: SessionManagerService;
-  const mockDb = db as jest.Mocked<typeof db>;
+  const mockDb = monitoredDb as jest.Mocked<typeof monitoredDb>;
 
   const mockSession = {
     id: 'test-session-id',

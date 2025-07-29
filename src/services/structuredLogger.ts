@@ -49,7 +49,7 @@ export interface SystemContext extends BaseLogContext {
 }
 
 export interface ErrorContext extends BaseLogContext {
-  errorType: 'SystemError' | 'SessionError' | 'PerformanceError' | 'ValidationError' | 'UnknownError';
+  errorType: 'SystemError' | 'SessionError' | 'PerformanceError' | 'ValidationError' | 'UnknownError' | 'DatabaseError' | 'RedisError' | 'ServiceError' | 'ToolExecutionError';
   component: string;
   operation?: string;
   stackTrace?: string;
@@ -264,9 +264,10 @@ export class StructuredLogger implements IStructuredLogger {
     }
   }
 
-  private writeToFile(_entry: StructuredLogEntry): void {
+  private writeToFile(entry: StructuredLogEntry): void {
     // File logging implementation would go here
     // For now, we'll just implement console logging
+    console.log(`[FILE] ${JSON.stringify(entry)}`);
     // In a production system, you'd implement file rotation, etc.
   }
 

@@ -1,5 +1,8 @@
-import { db } from '../database/index.js';
+import { monitoredDb } from '../database/monitoredDatabase.js';
 import type { Session, ContextHistoryEntry } from '../database/schema.js';
+import { monitoringService } from './monitoringService.js';
+import { structuredLogger } from './structuredLogger.js';
+import { PerformanceTimer } from '../mcp/utils/performance.js';
 
 export interface ContextSummary {
   sessionKey: string;
@@ -20,18 +23,83 @@ export interface FullContext {
 
 class ContextManagerService {
   async getFullContext(sessionKey: string): Promise<FullContext | null> {
+    const timer = new PerformanceTimer();
+    const operationId = `get_full_context_${Date.now()}`;
+
     try {
+      structuredLogger.logSystemEvent({
+        timestamp: new Date(),
+        component: 'ContextManager',
+        operation: 'get_full_context_start',
+        status: 'started',
+        metadata: { operationId, sessionKey }
+      });
+
       // Get session
-      const session = await db.getSession(sessionKey);
+      const session = await monitoredDb.getSession(sessionKey);
       if (!session) {
+        const duration = timer.getElapsed();
+        
+        // Record metrics for failed operation
+        monitoringService.recordPerformanceMetrics('get_full_context', {
+          operation: 'get_full_context',
+          duration,
+          success: false,
+          metadata: { sessionKey, reason: 'session_not_found' }
+        });
+
         return null;
       }
+      timer.checkpoint('session_retrieved');
 
       // Get context history
-      const contextHistory = await db.getContextHistory(session.id);
+      const contextHistory = await monitoredDb.getContextHistory(session.id);
+      timer.checkpoint('context_history_retrieved');
 
       // Generate summary
       const summary = await this.createHandoffSummary(sessionKey);
+      timer.checkpoint('summary_generated');
+
+      const duration = timer.getElapsed();
+      const contextSize = JSON.stringify(contextHistory).length;
+
+      // Record successful metrics
+      monitoringService.recordPerformanceMetrics('get_full_context', {
+        operation: 'get_full_context',
+        duration,
+        success: true,
+        metadata: { 
+          sessionKey, 
+          contextEntries: contextHistory.length,
+          contextSizeBytes: contextSize
+        }
+      });
+
+      // Log performance metrics
+      structuredLogger.logPerformanceMetric({
+        timestamp: new Date(),
+        sessionId: session.id,
+        metricName: 'context_retrieval_duration',
+        metricValue: duration,
+        metricType: 'timer',
+        unit: 'milliseconds',
+        tags: { sessionKey, contextEntries: contextHistory.length.toString() },
+        metadata: { performanceBreakdown: timer.getAllCheckpointDurations() }
+      });
+
+      structuredLogger.logSystemEvent({
+        timestamp: new Date(),
+        component: 'ContextManager',
+        operation: 'get_full_context_complete',
+        status: 'completed',
+        metadata: {
+          operationId,
+          sessionId: session.id,
+          durationMs: duration,
+          contextEntries: contextHistory.length,
+          contextSizeBytes: contextSize
+        }
+      });
 
       return {
         session,
@@ -39,29 +107,106 @@ class ContextManagerService {
         summary
       };
     } catch (error) {
-      console.error('Error getting full context:', error);
+      const duration = timer.getElapsed();
+
+      // Record error metrics
+      monitoringService.recordPerformanceMetrics('get_full_context', {
+        operation: 'get_full_context',
+        duration,
+        success: false,
+        metadata: { sessionKey, error: (error as Error).message }
+      });
+
+      // Log error
+      structuredLogger.logError(error as Error, {
+        timestamp: new Date(),
+        errorType: 'ServiceError',
+        component: 'ContextManager',
+        operation: 'get_full_context',
+        additionalInfo: { operationId, sessionKey, durationMs: duration }
+      });
+
       throw error;
     }
   }
 
   async createHandoffSummary(sessionKey: string): Promise<ContextSummary> {
+    const timer = new PerformanceTimer();
+    const operationId = `create_handoff_summary_${Date.now()}`;
+
     try {
-      const session = await db.getSession(sessionKey);
+      structuredLogger.logSystemEvent({
+        timestamp: new Date(),
+        component: 'ContextManager',
+        operation: 'create_handoff_summary_start',
+        status: 'started',
+        metadata: { operationId, sessionKey }
+      });
+
+      const session = await monitoredDb.getSession(sessionKey);
       if (!session) {
         throw new Error('Session not found');
       }
+      timer.checkpoint('session_retrieved');
 
-      const contextHistory = await db.getContextHistory(session.id);
+      const contextHistory = await monitoredDb.getContextHistory(session.id);
+      timer.checkpoint('context_history_retrieved');
 
       // Analyze context types
       const messageCount = contextHistory.filter(c => c.contextType === 'message').length;
       const fileCount = contextHistory.filter(c => c.contextType === 'file').length;
       const toolCallCount = contextHistory.filter(c => c.contextType === 'tool_call').length;
+      timer.checkpoint('context_analyzed');
 
       // Extract key information
       const keyPoints = this.extractKeyPoints(contextHistory);
       const participants = this.extractParticipants(session, contextHistory);
       const summary = this.generateSummaryText(contextHistory, session);
+      timer.checkpoint('summary_generated');
+
+      const duration = timer.getElapsed();
+      const summaryLength = summary.length;
+
+      // Record performance metrics
+      monitoringService.recordPerformanceMetrics('create_handoff_summary', {
+        operation: 'create_handoff_summary',
+        duration,
+        success: true,
+        metadata: {
+          sessionKey,
+          contextEntries: contextHistory.length,
+          summaryLength,
+          messageCount,
+          fileCount,
+          toolCallCount
+        }
+      });
+
+      // Log performance metric
+      structuredLogger.logPerformanceMetric({
+        timestamp: new Date(),
+        sessionId: session.id,
+        metricName: 'handoff_summary_generation_duration',
+        metricValue: duration,
+        metricType: 'timer',
+        unit: 'milliseconds',
+        tags: { sessionKey, contextEntries: contextHistory.length.toString() },
+        metadata: { performanceBreakdown: timer.getAllCheckpointDurations() }
+      });
+
+      structuredLogger.logSystemEvent({
+        timestamp: new Date(),
+        component: 'ContextManager',
+        operation: 'create_handoff_summary_complete',
+        status: 'completed',
+        metadata: {
+          operationId,
+          sessionId: session.id,
+          durationMs: duration,
+          summaryLength,
+          contextEntries: contextHistory.length
+        }
+      });
 
       return {
         sessionKey,
@@ -74,7 +219,25 @@ class ContextManagerService {
         participants
       };
     } catch (error) {
-      console.error('Error creating handoff summary:', error);
+      const duration = timer.getElapsed();
+
+      // Record error metrics
+      monitoringService.recordPerformanceMetrics('create_handoff_summary', {
+        operation: 'create_handoff_summary',
+        duration,
+        success: false,
+        metadata: { sessionKey, error: (error as Error).message }
+      });
+
+      // Log error
+      structuredLogger.logError(error as Error, {
+        timestamp: new Date(),
+        errorType: 'ServiceError',
+        component: 'ContextManager',
+        operation: 'create_handoff_summary',
+        additionalInfo: { operationId, sessionKey, durationMs: duration }
+      });
+
       throw error;
     }
   }
@@ -199,17 +362,16 @@ class ContextManagerService {
 
   async getSessionsByAgent(agent: string): Promise<Session[]> {
     try {
-      const sessions = await db.query<Session>(
+      const sessions = await monitoredDb.query<Session>(
         'SELECT * FROM sessions WHERE agentFrom = $1 OR agentTo = $1',
         [agent]
       );
       return sessions.rows;
     } catch (error) {
       console.error('Error fetching sessions by agent:', error);
-      throw error;
+      // In a full implementation, you'd add this method to DatabaseManager
+      return [];
     }
-    // In a full implementation, you'd add this method to DatabaseManager
-    return [];
   }
 }
 

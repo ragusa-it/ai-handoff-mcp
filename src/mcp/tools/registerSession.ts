@@ -1,8 +1,8 @@
-import { db } from '../../database/index.js';
-import { structuredLogger } from '../../services/structuredLogger.js';
+import { monitoredDb } from '../../database/monitoredDatabase.js';
 import { sessionManagerService } from '../../services/sessionManager.js';
 import { handleToolError, createSuccessResponse, createFailureResponse } from '../utils/errorHandler.js';
 import { PerformanceTimer } from '../utils/performance.js';
+import { monitoredToolWrapper } from '../utils/monitoredToolWrapper.js';
 import { LOG_MESSAGES } from '../constants.js';
 
 export interface RegisterSessionArgs {
@@ -11,28 +11,17 @@ export interface RegisterSessionArgs {
   metadata?: Record<string, any>;
 }
 
-export async function registerSessionTool(args: RegisterSessionArgs) {
+// Internal implementation without monitoring wrapper
+async function _registerSessionTool(args: RegisterSessionArgs) {
   const { sessionKey, agentFrom, metadata = {} } = args;
   const timer = new PerformanceTimer();
 
   try {
     // Check if session already exists
-    const existingSession = await db.getSession(sessionKey);
+    const existingSession = await monitoredDb.getSession(sessionKey);
     timer.checkpoint('session_check');
     
     if (existingSession) {
-      // Log session creation attempt with existing session
-      structuredLogger.logToolCall({
-        timestamp: new Date(),
-        toolName: 'registerSession',
-        executionTimeMs: timer.getElapsed(),
-        success: false,
-        sessionId: existingSession.id,
-        inputParameters: { sessionKey, agentFrom },
-        errorMessage: 'Session already exists',
-        metadata: { existingSessionStatus: existingSession.status }
-      });
-
       return createFailureResponse('Session already exists', {
         sessionKey,
         existingSession: {
@@ -45,7 +34,7 @@ export async function registerSessionTool(args: RegisterSessionArgs) {
     }
 
     // Create new session
-    const session = await db.createSession(sessionKey, agentFrom, metadata);
+    const session = await monitoredDb.createSession(sessionKey, agentFrom, metadata);
     timer.checkpoint('session_created');
 
     // Schedule session expiration using session manager
@@ -53,32 +42,13 @@ export async function registerSessionTool(args: RegisterSessionArgs) {
     timer.checkpoint('expiration_scheduled');
 
     // Add initial context entry
-    await db.addContextEntry(
+    await monitoredDb.addContextEntry(
       session.id,
       'system',
       LOG_MESSAGES.SESSION_REGISTERED(agentFrom),
       { action: 'session_registered', ...metadata }
     );
     timer.checkpoint('context_added');
-
-    // Log successful session creation
-    structuredLogger.logToolCall({
-      timestamp: new Date(),
-      toolName: 'registerSession',
-      executionTimeMs: timer.getElapsed(),
-      success: true,
-      sessionId: session.id,
-      inputParameters: { sessionKey, agentFrom },
-      outputData: {
-        sessionId: session.id,
-        status: session.status,
-        createdAt: session.createdAt
-      },
-      metadata: { 
-        metadataKeys: Object.keys(metadata),
-        performanceBreakdown: timer.getAllCheckpointDurations()
-      }
-    });
 
     return createSuccessResponse({
       success: true,
@@ -111,3 +81,9 @@ export async function registerSessionTool(args: RegisterSessionArgs) {
     );
   }
 }
+
+// Export monitored version
+export const registerSessionTool = monitoredToolWrapper.wrapTool(
+  'registerSession',
+  _registerSessionTool
+);
