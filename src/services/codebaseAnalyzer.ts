@@ -358,7 +358,7 @@ class CodebaseAnalyzerService {
     // Store the analysis result in the codebase_snapshots table
     await db.query(
       `INSERT INTO codebase_snapshots (session_id, file_path, content_hash, analysis, summary, timestamp)
-       VALUES (?, ?, ?, ?, ?, ?)`,
+       VALUES ($1, $2, $3, $4, $5, $6)`,
       [
         sessionId,
         result.filePath,
