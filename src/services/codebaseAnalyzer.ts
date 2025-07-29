@@ -352,8 +352,21 @@ class CodebaseAnalyzerService {
   }
 
   private async storeAnalysisResult(sessionId: string, result: CodeAnalysisResult): Promise<void> {
-    // This would store in the codebase_snapshots table
-    // For now, we'll just add it as a context entry
+    // Store the analysis result in the codebase_snapshots table
+    await db.query(
+      `INSERT INTO codebase_snapshots (session_id, file_path, content_hash, analysis, summary, timestamp)
+       VALUES (?, ?, ?, ?, ?, ?)`,
+      [
+        sessionId,
+        result.filePath,
+        result.contentHash,
+        JSON.stringify(result.analysis),
+        result.summary,
+        result.timestamp.toISOString()
+      ]
+    );
+
+    // Add a context entry for additional tracking
     await db.addContextEntry(
       sessionId,
       'file',
