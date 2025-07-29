@@ -1,0 +1,49 @@
+services:
+  postgres:
+    image: postgres:15-alpine
+    container_name: ai-handoff-postgres
+    environment:
+      POSTGRES_DB: ai_handoff
+      POSTGRES_USER: ai_handoff_user
+      POSTGRES_PASSWORD: ai_handoff_password
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./scripts/init-db.sql:/docker-entrypoint-initdb.d/init-db.sql
+    networks:
+      - ai-handoff-network
+
+  redis:
+    image: redis:7-alpine
+    container_name: ai-handoff-redis
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    networks:
+      - ai-handoff-network
+    command: redis-server --appendonly yes
+
+  pgadmin:
+    image: dpage/pgadmin4:latest
+    container_name: ai-handoff-pgadmin
+    environment:
+      PGADMIN_DEFAULT_EMAIL: admin@aihandoff.local
+      PGADMIN_DEFAULT_PASSWORD: admin
+    ports:
+      - "8080:80"
+    depends_on:
+      - postgres
+    networks:
+      - ai-handoff-network
+    profiles:
+      - tools
+
+volumes:
+  postgres_data:
+  redis_data:
+
+networks:
+  ai-handoff-network:
+    driver: bridge
