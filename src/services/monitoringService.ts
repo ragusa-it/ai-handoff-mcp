@@ -1,5 +1,5 @@
 import { db } from '../database/index.js';
-import { structuredLogger, type PerformanceMetric, type SystemContext } from './structuredLogger.js';
+import { structuredLogger } from './structuredLogger.js';
 import { PerformanceTimer } from '../mcp/utils/performance.js';
 
 // Health status interfaces
@@ -117,8 +117,8 @@ export interface IMonitoringService {
 export class MonitoringService implements IMonitoringService {
   private config: MonitoringConfig;
   private startTime: Date;
-  private healthCheckTimer?: NodeJS.Timeout;
-  private metricsCollectionTimer?: NodeJS.Timeout;
+  private healthCheckTimer?: NodeJS.Timeout | undefined;
+  private metricsCollectionTimer?: NodeJS.Timeout | undefined;
   private isRunning = false;
   
   // In-memory metrics storage for Prometheus export
@@ -486,7 +486,7 @@ export class MonitoringService implements IMonitoringService {
           tool_name: toolName,
           success: success.toString()
         },
-        metadata
+        metadata: metadata || {}
       });
 
       // Store in database for historical analysis
@@ -569,7 +569,7 @@ export class MonitoringService implements IMonitoringService {
   /**
    * Record performance metrics for operations
    */
-  recordPerformanceMetrics(operation: string, metrics: PerformanceMetrics): void {
+  recordPerformanceMetrics(_operation: string, metrics: PerformanceMetrics): void {
     try {
       // Log performance metric
       structuredLogger.logPerformanceMetric({
@@ -582,7 +582,7 @@ export class MonitoringService implements IMonitoringService {
           operation: metrics.operation,
           success: metrics.success.toString()
         },
-        metadata: metrics.metadata
+        metadata: metrics.metadata || {}
       });
 
       // Store in database for historical analysis
@@ -975,7 +975,7 @@ export class MonitoringService implements IMonitoringService {
         [operation, duration, success, sessionId || null, JSON.stringify(metadata || {})]
       );
     } catch (error) {
-      // Don't throw here to avoid recursion in error logging
+      // Don't log database errors when storing performance logs to avoid recursion
       console.error('Failed to store performance log:', error);
     }
   }
@@ -985,24 +985,58 @@ export class MonitoringService implements IMonitoringService {
    */
   private async storeSystemMetrics(metrics: SystemMetrics): Promise<void> {
     try {
-      const metricsToStore = [
-        { name: 'memory_usage_bytes', value: metrics.memory.used, type: 'gauge' },
-        { name: 'memory_usage_percentage', value: metrics.memory.percentage, type: 'gauge' },
-        { name: 'cpu_usage_percentage', value: metrics.cpu.usage, type: 'gauge' },
-        { name: 'active_sessions', value: metrics.sessions.active, type: 'gauge' },
-        { name: 'dormant_sessions', value: metrics.sessions.dormant, type: 'gauge' },
-        { name: 'archived_sessions', value: metrics.sessions.archived, type: 'gauge' }
+      const queries = [
+        {
+          name: 'memory_usage_bytes',
+          value: metrics.memory.used,
+          type: 'gauge',
+          labels: { component: 'system' }
+        },
+        {
+          name: 'memory_usage_percentage',
+          value: metrics.memory.percentage,
+          type: 'gauge',
+          labels: { component: 'system' }
+        },
+        {
+          name: 'cpu_usage_percentage',
+          value: metrics.cpu.usage,
+          type: 'gauge',
+          labels: { component: 'system' }
+        },
+        {
+          name: 'active_sessions',
+          value: metrics.sessions.active,
+          type: 'gauge',
+          labels: { component: 'sessions' }
+        },
+        {
+          name: 'dormant_sessions',
+          value: metrics.sessions.dormant,
+          type: 'gauge',
+          labels: { component: 'sessions' }
+        },
+        {
+          name: 'archived_sessions',
+          value: metrics.sessions.archived,
+          type: 'gauge',
+          labels: { component: 'sessions' }
+        }
       ];
 
-      for (const metric of metricsToStore) {
+      for (const metric of queries) {
         await db.query(
-          'INSERT INTO system_metrics (metric_name, metric_value, metric_type) VALUES ($1, $2, $3)',
-          [metric.name, metric.value, metric.type]
+          'INSERT INTO system_metrics (metric_name, metric_value, metric_type, labels) VALUES ($1, $2, $3, $4)',
+          [metric.name, metric.value, metric.type, JSON.stringify(metric.labels)]
         );
       }
     } catch (error) {
-      // Don't throw here to avoid recursion in error logging
-      console.error('Failed to store system metrics:', error);
+      structuredLogger.logError(error as Error, {
+        timestamp: new Date(),
+        errorType: 'SystemError',
+        component: 'MonitoringService',
+        operation: 'storeSystemMetrics'
+      });
     }
   }
 
