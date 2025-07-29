@@ -119,6 +119,12 @@ export class DatabaseManager {
     const values: any[] = [];
     let paramCount = 1;
 
+    // Check if session is archived - archived sessions are read-only
+    const existingSession = await this.getSession(sessionKey);
+    if (existingSession?.archivedAt) {
+      throw new Error(`Cannot update archived session: ${sessionKey}`);
+    }
+
     if (updates.agentTo !== undefined) {
       setParts.push(`agent_to = $${paramCount++}`);
       values.push(updates.agentTo);
@@ -135,8 +141,23 @@ export class DatabaseManager {
       setParts.push(`metadata = $${paramCount++}`);
       values.push(JSON.stringify(updates.metadata));
     }
+    if (updates.lastActivityAt !== undefined) {
+      setParts.push(`last_activity_at = $${paramCount++}`);
+      values.push(updates.lastActivityAt);
+    }
+    if (updates.isDormant !== undefined) {
+      setParts.push(`is_dormant = $${paramCount++}`);
+      values.push(updates.isDormant);
+    }
+    if (updates.retentionPolicy !== undefined) {
+      setParts.push(`retention_policy = $${paramCount++}`);
+      values.push(updates.retentionPolicy);
+    }
 
-    if (setParts.length === 0) return null;
+    // Always update the updated_at timestamp
+    setParts.push(`updated_at = NOW()`);
+
+    if (setParts.length === 1) return null; // Only updated_at was added
 
     values.push(sessionKey);
     const query = `
@@ -150,8 +171,44 @@ export class DatabaseManager {
     return result.rows.length > 0 ? this.mapRowToSession(result.rows[0]) : null;
   }
 
+  // Archived session methods
+  async getArchivedSession(sessionKey: string): Promise<Session | null> {
+    // Check archived cache first
+    const archivedCacheKey = `archived_session_by_key:${sessionKey}`;
+    const cachedSession = await this.getCache<Session>(archivedCacheKey);
+    
+    if (cachedSession) {
+      return cachedSession;
+    }
+
+    // If not in cache, query database for archived session
+    const query = 'SELECT * FROM sessions WHERE session_key = $1 AND archived_at IS NOT NULL';
+    const result = await this.pool.query(query, [sessionKey]);
+    
+    if (result.rows.length > 0) {
+      const session = this.mapRowToSession(result.rows[0]);
+      // Cache the archived session for future access
+      await this.setCache(archivedCacheKey, session, 24 * 60 * 60); // Cache for 24 hours
+      return session;
+    }
+
+    return null;
+  }
+
+  async getSessionById(sessionId: string): Promise<Session | null> {
+    const query = 'SELECT * FROM sessions WHERE id = $1';
+    const result = await this.pool.query(query, [sessionId]);
+    return result.rows.length > 0 ? this.mapRowToSession(result.rows[0]) : null;
+  }
+
   // Context history methods
   async addContextEntry(sessionId: string, contextType: ContextHistoryEntry['contextType'], content: string, metadata: Record<string, any> = {}): Promise<ContextHistoryEntry> {
+    // Check if session is archived - archived sessions are read-only
+    const session = await this.getSessionById(sessionId);
+    if (session?.archivedAt) {
+      throw new Error(`Cannot add context to archived session: ${sessionId}`);
+    }
+
     // Get the next sequence number
     const seqQuery = `
       SELECT COALESCE(MAX(sequence_number), 0) + 1 as next_seq

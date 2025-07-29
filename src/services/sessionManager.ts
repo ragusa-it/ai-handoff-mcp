@@ -125,6 +125,13 @@ class SessionManagerService {
         ['expired', sessionId]
       );
 
+      // Ensure referential integrity (don't fail the operation if this fails)
+      try {
+        await this.ensureReferentialIntegrity(sessionId);
+      } catch (error) {
+        console.warn(`Referential integrity check failed for session ${sessionId}:`, error);
+      }
+
       // Log the expiration event
       await this.logLifecycleEvent(sessionId, 'expired', {
         previous_status: session.status,
@@ -164,6 +171,7 @@ class SessionManagerService {
 
       // Cache session data in Redis for faster read access
       const cacheKey = `archived_session:${sessionId}`;
+      const cacheKeyBySessionKey = `archived_session_by_key:${session.sessionKey}`;
       const sessionData = {
         ...session,
         archivedAt,
@@ -172,6 +180,14 @@ class SessionManagerService {
       
       // Cache for 7 days by default
       await db.setCache(cacheKey, sessionData, 7 * 24 * 60 * 60);
+      await db.setCache(cacheKeyBySessionKey, sessionData, 7 * 24 * 60 * 60);
+
+      // Ensure referential integrity (don't fail the operation if this fails)
+      try {
+        await this.ensureReferentialIntegrity(sessionId);
+      } catch (error) {
+        console.warn(`Referential integrity check failed for session ${sessionId}:`, error);
+      }
 
       // Log the archival event
       await this.logLifecycleEvent(sessionId, 'archived', {
@@ -491,6 +507,64 @@ class SessionManagerService {
       };
     } catch (error) {
       console.error(`Error getting session by ID ${sessionId}:`, error);
+      throw error;
+    }
+  }
+
+  /**
+   * Ensure referential integrity during session lifecycle transitions
+   */
+  async ensureReferentialIntegrity(sessionId: string): Promise<void> {
+    try {
+      await db.query('BEGIN');
+      
+      try {
+        // Check for orphaned context entries
+        const orphanedContextQuery = `
+          SELECT COUNT(*) as count
+          FROM context_history ch
+          LEFT JOIN sessions s ON ch.session_id = s.id
+          WHERE ch.session_id = $1 AND s.id IS NULL
+        `;
+        const orphanedResult = await db.query(orphanedContextQuery, [sessionId]);
+        
+        if (parseInt(orphanedResult.rows[0].count) > 0) {
+          console.warn(`Found orphaned context entries for session ${sessionId}`);
+        }
+
+        // Check for orphaned lifecycle events
+        const orphanedLifecycleQuery = `
+          SELECT COUNT(*) as count
+          FROM session_lifecycle sl
+          LEFT JOIN sessions s ON sl.session_id = s.id
+          WHERE sl.session_id = $1 AND s.id IS NULL
+        `;
+        const orphanedLifecycleResult = await db.query(orphanedLifecycleQuery, [sessionId]);
+        
+        if (parseInt(orphanedLifecycleResult.rows[0].count) > 0) {
+          console.warn(`Found orphaned lifecycle events for session ${sessionId}`);
+        }
+
+        // Check for orphaned performance logs
+        const orphanedPerformanceQuery = `
+          SELECT COUNT(*) as count
+          FROM performance_logs pl
+          LEFT JOIN sessions s ON pl.session_id = s.id
+          WHERE pl.session_id = $1 AND s.id IS NULL
+        `;
+        const orphanedPerformanceResult = await db.query(orphanedPerformanceQuery, [sessionId]);
+        
+        if (parseInt(orphanedPerformanceResult.rows[0].count) > 0) {
+          console.warn(`Found orphaned performance logs for session ${sessionId}`);
+        }
+
+        await db.query('COMMIT');
+      } catch (error) {
+        await db.query('ROLLBACK');
+        throw error;
+      }
+    } catch (error) {
+      console.error(`Error checking referential integrity for session ${sessionId}:`, error);
       throw error;
     }
   }

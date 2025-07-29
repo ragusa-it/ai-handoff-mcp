@@ -1,6 +1,7 @@
 import { db } from '../../database/index.js';
 import { contextManagerService } from '../../services/contextManager.js';
 import { structuredLogger } from '../../services/structuredLogger.js';
+import { sessionManagerService } from '../../services/sessionManager.js';
 
 export interface RequestHandoffArgs {
   sessionKey: string;
@@ -108,11 +109,12 @@ export async function requestHandoffTool(args: RequestHandoffArgs) {
     const handoffSummary = await contextManagerService.createHandoffSummary(sessionKey);
     const summaryTime = Date.now() - summaryStartTime;
 
-    // Update session with target agent
+    // Update session with target agent and track activity
     const updateStartTime = Date.now();
     await db.updateSession(sessionKey, {
       agentTo: targetAgent,
       status: requestType === 'full_handoff' ? 'completed' : 'active',
+      lastActivityAt: new Date(),
       metadata: {
         ...session.metadata,
         lastHandoffRequest: new Date().toISOString(),
@@ -121,6 +123,11 @@ export async function requestHandoffTool(args: RequestHandoffArgs) {
       }
     });
     const updateTime = Date.now() - updateStartTime;
+
+    // Reactivate session if it was dormant
+    if (session.isDormant) {
+      await sessionManagerService.reactivateSession(session.id);
+    }
 
     // Add context entry for the handoff request
     await db.addContextEntry(

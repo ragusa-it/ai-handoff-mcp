@@ -95,12 +95,6 @@ export async function updateContextTool(args: UpdateContextArgs) {
       }
     );
 
-    // Update context entry with performance metrics
-    await db.query(
-      'UPDATE context_history SET processing_time_ms = $1, content_size_bytes = $2 WHERE id = $3',
-      [executionTime, contentSize, contextEntry.id]
-    );
-
     // Cache the latest context for quick access
     const cacheKey = `session:${sessionKey}:latest_context`;
     const cacheStartTime = Date.now();
@@ -113,6 +107,12 @@ export async function updateContextTool(args: UpdateContextArgs) {
     const cacheTime = Date.now() - cacheStartTime;
 
     const executionTime = Date.now() - startTime;
+
+    // Update context entry with performance metrics
+    await db.query(
+      'UPDATE context_history SET processing_time_ms = $1, content_size_bytes = $2 WHERE id = $3',
+      [executionTime, contentSize, contextEntry.id]
+    );
 
     // Log successful context update with performance metrics
     structuredLogger.logToolCall({

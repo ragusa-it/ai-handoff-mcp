@@ -42,7 +42,7 @@
     - Implement retention policy enforcement job
     - _Requirements: 1.1, 1.2, 1.3, 6.2_
 
-  - [-] 3.3 Integrate session manager with existing session operations
+  - [x] 3.3 Integrate session manager with existing session operations
     - Modify existing session creation to set expiration times and schedule cleanup
     - Update session update operations to track last activity timestamps
     - Add session archival logic to maintain read-only access to historical data
@@ -51,7 +51,7 @@
 
 - [ ] 4. Implement monitoring and health check service
 
-  - [ ] 4.1 Create MonitoringService class with health checks
+  - [-] 4.1 Create MonitoringService class with health checks
 
     - Write health check methods for database, Redis, and overall system health
     - Implement component health status tracking and reporting
