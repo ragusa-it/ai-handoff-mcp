@@ -264,9 +264,9 @@ class AIHandoffMCPServer {
     const transport = new StdioServerTransport();
     await this.server.connect(transport);
     
-    console.error('✅ AI Handoff MCP Server started successfully');
-    console.error(`📡 Server: ${mcpConfig.name} v${mcpConfig.version}`);
-    console.error(`🔧 Environment: ${config.NODE_ENV}`);
+    console.log('✅ AI Handoff MCP Server started successfully');
+    console.log(`📡 Server: ${mcpConfig.name} v${mcpConfig.version}`);
+    console.log(`🔧 Environment: ${config.NODE_ENV}`);
   }
 }
 
