@@ -272,13 +272,13 @@ class AIHandoffMCPServer {
 
 // Handle graceful shutdown
 process.on('SIGINT', async () => {
-  console.error('🛑 Shutting down server...');
+  console.log('🛑 Shutting down server...');
   await db.close();
   process.exit(0);
 });
 
 process.on('SIGTERM', async () => {
-  console.error('🛑 Shutting down server...');
+  console.log('🛑 Shutting down server...');
   await db.close();
   process.exit(0);
 });
