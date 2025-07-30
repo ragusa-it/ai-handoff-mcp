@@ -40,6 +40,7 @@ coverage/
 *.swp
 *.swo
 *~
+.mcp.json
 
 # OS generated files
 .DS_Store
