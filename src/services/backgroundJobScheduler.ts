@@ -1,5 +1,6 @@
 import { sessionManagerService } from './sessionManager.js';
 import type { RetentionPolicy } from './sessionManager.js';
+import { JobResult as CommonJobResult } from '../types/common.js';
 
 export interface JobConfig {
   name: string;
@@ -15,7 +16,7 @@ export interface JobResult {
   startTime: Date;
   endTime: Date;
   duration: number;
-  result?: any;
+  result?: CommonJobResult;
   error?: string;
   retryCount: number;
 }
@@ -240,7 +241,7 @@ class BackgroundJobScheduler {
   /**
    * Execute a specific job
    */
-  private async executeJob(jobName: string): Promise<any> {
+  private async executeJob(jobName: string): Promise<CommonJobResult> {
     switch (jobName) {
       case 'session-cleanup':
         return await this.runSessionCleanupJob();
@@ -262,7 +263,7 @@ class BackgroundJobScheduler {
   /**
    * Session cleanup job implementation
    */
-  private async runSessionCleanupJob(): Promise<any> {
+  private async runSessionCleanupJob(): Promise<CommonJobResult> {
     console.log('Running session cleanup job...');
     
     const cleanedCount = await sessionManagerService.cleanupOrphanedSessions();
@@ -277,7 +278,7 @@ class BackgroundJobScheduler {
   /**
    * Dormant session detection job implementation
    */
-  private async runDormantDetectionJob(): Promise<any> {
+  private async runDormantDetectionJob(): Promise<CommonJobResult> {
     console.log('Running dormant session detection job...');
     
     const dormantCount = await sessionManagerService.detectDormantSessions();
@@ -290,7 +291,7 @@ class BackgroundJobScheduler {
   /**
    * Retention policy enforcement job implementation
    */
-  private async runRetentionEnforcementJob(): Promise<any> {
+  private async runRetentionEnforcementJob(): Promise<CommonJobResult> {
     console.log('Running retention policy enforcement job...');
     
     const results = {
@@ -319,7 +320,7 @@ class BackgroundJobScheduler {
   /**
    * Cache optimization job implementation
    */
-  private async runCacheOptimizationJob(): Promise<any> {
+  private async runCacheOptimizationJob(): Promise<CommonJobResult> {
     console.log('Running cache optimization job...');
     
     // This would implement cache cleanup and optimization logic

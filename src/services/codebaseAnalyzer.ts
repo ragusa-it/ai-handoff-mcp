@@ -2,6 +2,7 @@ import { readFile } from 'fs/promises';
 import { extname, basename } from 'path';
 import { createHash } from 'crypto';
 import { db } from '../database/index.js';
+import { BaseMetadata, AnalysisResult } from '../types/common.js';
 
 export interface CodeAnalysisResult {
   filePath: string;
@@ -17,7 +18,7 @@ export interface CodeAnalysisResult {
     classes?: string[];
     dependencies?: string[];
     complexity?: number;
-    structure?: any;
+    structure?: BaseMetadata;
   };
   summary: string;
   timestamp: Date;
@@ -36,7 +37,7 @@ class CodebaseAnalyzerService {
     sessionKey: string,
     filePaths: string[],
     analysisType: 'syntax' | 'dependencies' | 'structure' | 'full' = 'structure'
-  ): Promise<any> {
+  ): Promise<AnalysisResult> {
     try {
       const session = await db.getSession(sessionKey);
       if (!session) {
@@ -131,7 +132,7 @@ class CodebaseAnalyzerService {
     const lines = content.split('\n');
     
     const analysis: CodeAnalysisResult['analysis'] = {
-      type: analysisType as any,
+      type: analysisType,
       language,
       fileSize: content.length,
       lineCount: lines.length

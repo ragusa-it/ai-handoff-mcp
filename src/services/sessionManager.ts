@@ -3,6 +3,7 @@ import type { Session } from '../database/schema.js';
 import { monitoringService } from './monitoringService.js';
 import { structuredLogger } from './structuredLogger.js';
 import { PerformanceTimer } from '../mcp/utils/performance.js';
+import { LifecycleEventData } from '../types/common.js';
 
 export interface RetentionPolicy {
   name: string;
@@ -636,7 +637,7 @@ class SessionManagerService {
   /**
    * Helper method to log lifecycle events
    */
-  private async logLifecycleEvent(sessionId: string, eventType: string, eventData: Record<string, any>): Promise<void> {
+  private async logLifecycleEvent(sessionId: string, eventType: string, eventData: LifecycleEventData): Promise<void> {
     try {
       await monitoredDb.query(
         'INSERT INTO session_lifecycle (session_id, event_type, event_data) VALUES ($1, $2, $3)',

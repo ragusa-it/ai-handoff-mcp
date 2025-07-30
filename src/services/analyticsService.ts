@@ -2,6 +2,13 @@ import { monitoredDb } from '../database/monitoredDatabase.js';
 import { monitoringService } from './monitoringService.js';
 import { structuredLogger } from './structuredLogger.js';
 import { PerformanceTimer } from '../mcp/utils/performance.js';
+import { 
+  AnalyticsMetadata, 
+  QueryParameter, 
+  CacheValue,
+  ResourceUsageData,
+  StatsData
+} from '../types/common.js';
 
 // Analytics interfaces
 export interface SessionStatistics {
@@ -87,7 +94,7 @@ export interface PerformanceTrends {
     operation: string;
     timestamp: Date;
     duration: number;
-    metadata?: Record<string, any>;
+    metadata?: AnalyticsMetadata;
   }>;
   timeRange: { start: Date; end: Date };
 }
@@ -175,7 +182,7 @@ export interface SessionAnomaly {
   description: string;
   severity: 'low' | 'medium' | 'high' | 'critical';
   confidence: number;
-  metadata: Record<string, any>;
+  metadata: AnalyticsMetadata;
   affectedSessions?: string[];
   suggestedAction?: string;
 }
@@ -328,7 +335,7 @@ export interface SystemMetrics {
  * for session management, handoff patterns, and system performance
  */
 export class AnalyticsService {
-  private cache = new Map<string, { data: any; expires: number }>();
+  private cache = new Map<string, { data: CacheValue; expires: number }>();
   private cacheTimeout = 5 * 60 * 1000; // 5 minutes
 
   constructor() {
@@ -404,7 +411,7 @@ export class AnalyticsService {
         GROUP BY status
       `;
 
-      const params: any[] = [query.timeRange.start, query.timeRange.end];
+      const params: QueryParameter[] = [query.timeRange.start, query.timeRange.end];
       if (query.filters?.sessionStatus) {
         params.push(query.filters.sessionStatus);
       }
@@ -424,7 +431,7 @@ export class AnalyticsService {
         ORDER BY count DESC
       `;
 
-      const agentParams: any[] = [query.timeRange.start, query.timeRange.end];
+      const agentParams: QueryParameter[] = [query.timeRange.start, query.timeRange.end];
       if (query.filters?.agentNames) {
         agentParams.push(query.filters.agentNames);
       }
@@ -948,7 +955,7 @@ export class AnalyticsService {
         ORDER BY created_at DESC
       `;
 
-      const params: any[] = [query.timeRange.start, query.timeRange.end];
+      const params: QueryParameter[] = [query.timeRange.start, query.timeRange.end];
       if (query.filters?.operations) {
         params.push(query.filters.operations);
       }
@@ -978,7 +985,7 @@ export class AnalyticsService {
         operation: string;
         timestamp: Date;
         duration: number;
-        metadata?: Record<string, any>;
+        metadata?: AnalyticsMetadata;
       }> = [];
 
       for (const row of performanceData.rows) {
@@ -1324,7 +1331,7 @@ export class AnalyticsService {
         metadata: { timeBucket, aggregationType }
       });
 
-      let aggregationData: Record<string, any> = {};
+      let aggregationData: StatsData = {};
 
       switch (aggregationType) {
         case 'hourly_session_stats':
@@ -1566,7 +1573,7 @@ export class AnalyticsService {
     return alerts;
   }
 
-  private generateResourceRecommendations(current: any, historical: Array<any>): Array<{ type: 'scale_up' | 'optimize' | 'cleanup'; description: string; priority: 'low' | 'medium' | 'high' }> {
+  private generateResourceRecommendations(current: ResourceUsageData, historical: ResourceUsageData[]): Array<{ type: 'scale_up' | 'optimize' | 'cleanup'; description: string; priority: 'low' | 'medium' | 'high' }> {
     const recommendations: Array<{ type: 'scale_up' | 'optimize' | 'cleanup'; description: string; priority: 'low' | 'medium' | 'high' }> = [];
 
     const memoryUsage = current.memory?.percentage || current.memoryUsage || 0;
@@ -1599,7 +1606,7 @@ export class AnalyticsService {
     return recommendations;
   }
 
-  private async calculateHourlySessionStats(timeBucket: Date): Promise<Record<string, any>> {
+  private async calculateHourlySessionStats(timeBucket: Date): Promise<StatsData> {
     const bucketEnd = new Date(timeBucket.getTime() + 60 * 60 * 1000);
     
     const query = `
@@ -1614,7 +1621,7 @@ export class AnalyticsService {
 
     const result = await monitoredDb.query(query, [timeBucket, bucketEnd]);
     
-    const stats: Record<string, any> = {
+    const stats: StatsData = {
       timestamp: timeBucket,
       totalSessions: 0,
       sessionsByStatus: {},
@@ -1637,7 +1644,7 @@ export class AnalyticsService {
     return stats;
   }
 
-  private async calculateHourlyHandoffStats(timeBucket: Date): Promise<Record<string, any>> {
+  private async calculateHourlyHandoffStats(timeBucket: Date): Promise<StatsData> {
     const bucketEnd = new Date(timeBucket.getTime() + 60 * 60 * 1000);
     
     const query = `
@@ -1655,7 +1662,7 @@ export class AnalyticsService {
 
     const result = await monitoredDb.query(query, [timeBucket, bucketEnd]);
     
-    const stats: Record<string, any> = {
+    const stats: StatsData = {
       timestamp: timeBucket,
       totalHandoffs: 0,
       successfulHandoffs: 0,
@@ -1698,7 +1705,7 @@ export class AnalyticsService {
     return stats;
   }
 
-  private async calculateHourlyPerformanceTrends(timeBucket: Date): Promise<Record<string, any>> {
+  private async calculateHourlyPerformanceTrends(timeBucket: Date): Promise<StatsData> {
     const bucketEnd = new Date(timeBucket.getTime() + 60 * 60 * 1000);
     
     const query = `
@@ -1717,7 +1724,7 @@ export class AnalyticsService {
 
     const result = await monitoredDb.query(query, [timeBucket, bucketEnd]);
     
-    const trends: Record<string, any> = {
+    const trends: StatsData = {
       timestamp: timeBucket,
       operations: {}
     };
@@ -1737,7 +1744,7 @@ export class AnalyticsService {
     return trends;
   }
 
-  private async calculateDailyContextGrowth(timeBucket: Date): Promise<Record<string, any>> {
+  private async calculateDailyContextGrowth(timeBucket: Date): Promise<StatsData> {
     const bucketEnd = new Date(timeBucket.getTime() + 24 * 60 * 60 * 1000);
     
     const query = `
@@ -1753,7 +1760,7 @@ export class AnalyticsService {
 
     const result = await monitoredDb.query(query, [timeBucket, bucketEnd]);
     
-    const growth: Record<string, any> = {
+    const growth: StatsData = {
       timestamp: timeBucket,
       totalEntries: 0,
       totalSize: 0,

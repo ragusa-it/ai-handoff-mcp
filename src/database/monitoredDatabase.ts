@@ -3,6 +3,7 @@ import { monitoringService } from '../services/monitoringService.js';
 import { structuredLogger } from '../services/structuredLogger.js';
 import { PerformanceTimer } from '../mcp/utils/performance.js';
 import type { Session, ContextHistoryEntry } from './schema.js';
+import { SessionMetadata, ContextMetadata, QueryParameter, CacheValue } from '../types/common.js';
 
 /**
  * Monitored Database Wrapper
@@ -24,7 +25,7 @@ export class MonitoredDatabaseManager extends DatabaseManager {
   /**
    * Wrap database query with monitoring
    */
-  async query<T = any>(text: string, params?: any[]): Promise<{ rows: T[]; rowCount: number }> {
+  async query<T = Record<string, unknown>>(text: string, params?: QueryParameter[]): Promise<{ rows: T[]; rowCount: number }> {
     const timer = new PerformanceTimer();
     const queryId = `query_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
     let success = true;
@@ -129,7 +130,7 @@ export class MonitoredDatabaseManager extends DatabaseManager {
   /**
    * Monitored session creation
    */
-  async createSession(sessionKey: string, agentFrom: string, metadata: Record<string, any> = {}): Promise<Session> {
+  async createSession(sessionKey: string, agentFrom: string, metadata: SessionMetadata = {}): Promise<Session> {
     const timer = new PerformanceTimer();
     const operationId = `create_session_${Date.now()}`;
 
@@ -251,7 +252,7 @@ export class MonitoredDatabaseManager extends DatabaseManager {
     sessionId: string, 
     contextType: ContextHistoryEntry['contextType'], 
     content: string, 
-    metadata: Record<string, any> = {}
+    metadata: ContextMetadata = {}
   ): Promise<ContextHistoryEntry> {
     const timer = new PerformanceTimer();
     const operationId = `add_context_${Date.now()}`;
@@ -345,7 +346,7 @@ export class MonitoredDatabaseManager extends DatabaseManager {
   /**
    * Monitored Redis cache operations
    */
-  async setCache(key: string, value: any, ttlSeconds?: number): Promise<void> {
+  async setCache(key: string, value: CacheValue, ttlSeconds?: number): Promise<void> {
     const timer = new PerformanceTimer();
     const operationId = `set_cache_${Date.now()}`;
     const valueSize = Buffer.byteLength(JSON.stringify(value), 'utf8');
@@ -400,7 +401,7 @@ export class MonitoredDatabaseManager extends DatabaseManager {
   /**
    * Monitored Redis cache retrieval
    */
-  async getCache<T = any>(key: string): Promise<T | null> {
+  async getCache<T = CacheValue>(key: string): Promise<T | null> {
     const timer = new PerformanceTimer();
 
     try {

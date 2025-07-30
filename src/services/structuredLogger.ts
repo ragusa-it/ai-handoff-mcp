@@ -1,4 +1,5 @@
 // Import config lazily to avoid environment validation during tests
+import { BaseMetadata, CacheValue } from '../types/common.js';
 
 // Log levels in order of severity
 export enum LogLevel {
@@ -14,15 +15,15 @@ export interface BaseLogContext {
   sessionId?: string;
   correlationId?: string;
   userId?: string;
-  metadata?: Record<string, any>;
+  metadata?: BaseMetadata;
 }
 
 export interface ToolCallContext extends BaseLogContext {
   toolName: string;
   executionTimeMs: number;
   success: boolean;
-  inputParameters?: Record<string, any>;
-  outputData?: any;
+  inputParameters?: BaseMetadata;
+  outputData?: CacheValue;
   errorMessage?: string;
 }
 
@@ -53,7 +54,7 @@ export interface ErrorContext extends BaseLogContext {
   component: string;
   operation?: string;
   stackTrace?: string;
-  additionalInfo?: Record<string, any>;
+  additionalInfo?: BaseMetadata;
 }
 
 export interface WarningContext extends BaseLogContext {
@@ -211,19 +212,27 @@ export class StructuredLogger implements IStructuredLogger {
     // Remove or mask sensitive fields
     const sensitiveFields = ['password', 'token', 'secret', 'key', 'auth', 'credential'];
     
-    const maskSensitiveData = (obj: any): any => {
+    const maskSensitiveData = (obj: unknown): unknown => {
       if (typeof obj !== 'object' || obj === null) {
         return obj;
       }
 
-      for (const key in obj) {
+      if (Array.isArray(obj)) {
+        return obj.map(maskSensitiveData);
+      }
+
+      const result: Record<string, unknown> = {};
+      const objRecord = obj as Record<string, unknown>;
+      for (const key in objRecord) {
         if (sensitiveFields.some(field => key.toLowerCase().includes(field))) {
-          obj[key] = '[REDACTED]';
-        } else if (typeof obj[key] === 'object') {
-          obj[key] = maskSensitiveData(obj[key]);
+          result[key] = '[REDACTED]';
+        } else if (typeof objRecord[key] === 'object') {
+          result[key] = maskSensitiveData(objRecord[key]);
+        } else {
+          result[key] = objRecord[key];
         }
       }
-      return obj;
+      return result;
     };
 
     return maskSensitiveData(sanitized);

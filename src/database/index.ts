@@ -17,6 +17,36 @@ import {
   type Session,
   type ContextHistoryEntry
 } from './schema.js';
+import { SessionMetadata, ContextMetadata, QueryParameter, CacheValue } from '../types/common.js';
+
+// Database row interfaces for proper typing
+interface SessionRow {
+  id: string;
+  session_key: string;
+  agent_from: string;
+  agent_to?: string | null;
+  status: string;
+  created_at: Date;
+  updated_at: Date;
+  expires_at?: Date | null;
+  metadata: SessionMetadata;
+  last_activity_at: Date;
+  is_dormant: boolean;
+  archived_at?: Date | null;
+  retention_policy: string | null;
+}
+
+interface ContextHistoryRow {
+  id: string;
+  session_id: string;
+  sequence_number: number;
+  context_type: string;
+  content: string;
+  metadata: ContextMetadata;
+  created_at: Date;
+  processing_time_ms?: number | null;
+  content_size_bytes?: number | null;
+}
 
 export class DatabaseManager {
   private pool: Pool;
@@ -88,7 +118,7 @@ export class DatabaseManager {
   }
 
   // Session management methods
-  async createSession(sessionKey: string, agentFrom: string, metadata: Record<string, any> = {}): Promise<Session> {
+  async createSession(sessionKey: string, agentFrom: string, metadata: SessionMetadata = {}): Promise<Session> {
     const query = `
       INSERT INTO sessions (session_key, agent_from, metadata)
       VALUES ($1, $2, $3)
@@ -116,7 +146,7 @@ export class DatabaseManager {
 
   async updateSession(sessionKey: string, updates: Partial<Session>): Promise<Session | null> {
     const setParts: string[] = [];
-    const values: any[] = [];
+    const values: QueryParameter[] = [];
     let paramCount = 1;
 
     // Check if session is archived - archived sessions are read-only
@@ -202,7 +232,7 @@ export class DatabaseManager {
   }
 
   // Context history methods
-  async addContextEntry(sessionId: string, contextType: ContextHistoryEntry['contextType'], content: string, metadata: Record<string, any> = {}): Promise<ContextHistoryEntry> {
+  async addContextEntry(sessionId: string, contextType: ContextHistoryEntry['contextType'], content: string, metadata: ContextMetadata = {}): Promise<ContextHistoryEntry> {
     // Check if session is archived - archived sessions are read-only
     const session = await this.getSessionById(sessionId);
     if (session?.archivedAt) {
@@ -245,7 +275,7 @@ export class DatabaseManager {
   }
 
   // Redis caching methods
-  async setCache(key: string, value: any, ttlSeconds?: number): Promise<void> {
+  async setCache(key: string, value: CacheValue, ttlSeconds?: number): Promise<void> {
     const serialized = JSON.stringify(value);
     if (ttlSeconds) {
       await this.redisClient.setEx(key, ttlSeconds, serialized);
@@ -254,7 +284,7 @@ export class DatabaseManager {
     }
   }
 
-  async getCache<T = any>(key: string): Promise<T | null> {
+  async getCache<T = CacheValue>(key: string): Promise<T | null> {
     const cached = await this.redisClient.get(key);
     return cached ? JSON.parse(cached) : null;
   }
@@ -264,40 +294,40 @@ export class DatabaseManager {
   }
 
   // Helper methods for row mapping
-  private mapRowToSession(row: any): Session {
+  private mapRowToSession(row: SessionRow): Session {
     return {
       id: row.id,
       sessionKey: row.session_key,
       agentFrom: row.agent_from,
-      agentTo: row.agent_to,
-      status: row.status,
+      agentTo: row.agent_to || undefined,
+      status: row.status as Session['status'],
       createdAt: row.created_at,
       updatedAt: row.updated_at,
-      expiresAt: row.expires_at,
+      expiresAt: row.expires_at || undefined,
       metadata: row.metadata || {},
       lastActivityAt: row.last_activity_at || row.created_at,
       isDormant: row.is_dormant || false,
-      archivedAt: row.archived_at,
+      archivedAt: row.archived_at || undefined,
       retentionPolicy: row.retention_policy || 'standard'
     };
   }
 
-  private mapRowToContextHistory(row: any): ContextHistoryEntry {
+  private mapRowToContextHistory(row: ContextHistoryRow): ContextHistoryEntry {
     return {
       id: row.id,
       sessionId: row.session_id,
       sequenceNumber: row.sequence_number,
-      contextType: row.context_type,
+      contextType: row.context_type as ContextHistoryEntry['contextType'],
       content: row.content,
       metadata: row.metadata || {},
       createdAt: row.created_at,
-      processingTimeMs: row.processing_time_ms,
-      contentSizeBytes: row.content_size_bytes
+      processingTimeMs: row.processing_time_ms || undefined,
+      contentSizeBytes: row.content_size_bytes || undefined
     };
   }
 
   // Generic query method for direct SQL execution
-  async query<T = any>(text: string, params?: any[]): Promise<{ rows: T[]; rowCount: number }> {
+  async query<T = Record<string, unknown>>(text: string, params?: QueryParameter[]): Promise<{ rows: T[]; rowCount: number }> {
     const client = await this.pool.connect();
     try {
       const result = await client.query(text, params);

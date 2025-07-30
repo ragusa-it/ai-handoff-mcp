@@ -1,3 +1,5 @@
+import { SessionMetadata, ContextMetadata, AnalysisResult, HandoffRequestData, LifecycleEventData, SystemLabels, PerformanceMetadata, AggregationData } from '../types/common.js';
+
 export interface Session {
   id: string;
   sessionKey: string;
@@ -7,7 +9,7 @@ export interface Session {
   createdAt: Date;
   updatedAt: Date;
   expiresAt?: Date;
-  metadata: Record<string, any>;
+  metadata: SessionMetadata;
   // Enhanced monitoring fields
   lastActivityAt: Date;
   isDormant: boolean;
@@ -21,7 +23,7 @@ export interface ContextHistoryEntry {
   sequenceNumber: number;
   contextType: 'message' | 'file' | 'tool_call' | 'system';
   content: string;
-  metadata: Record<string, any>;
+  metadata: ContextMetadata;
   createdAt: Date;
   // Enhanced monitoring fields
   processingTimeMs?: number;
@@ -34,7 +36,7 @@ export interface CodebaseSnapshot {
   filePath: string;
   contentHash: string;
   content?: string;
-  analysisResult: Record<string, any>;
+  analysisResult: AnalysisResult;
   createdAt: Date;
 }
 
@@ -44,7 +46,7 @@ export interface HandoffRequest {
   requestingAgent: string;
   targetAgent?: string;
   requestType: 'context_transfer' | 'full_handoff' | 'collaboration';
-  requestData: Record<string, any>;
+  requestData: HandoffRequestData;
   status: 'pending' | 'accepted' | 'rejected' | 'completed';
   createdAt: Date;
   completedAt?: Date;
@@ -55,7 +57,7 @@ export interface SessionLifecycleEvent {
   id: string;
   sessionId: string;
   eventType: 'created' | 'expired' | 'archived' | 'dormant' | 'reactivated' | 'status_changed';
-  eventData: Record<string, any>;
+  eventData: LifecycleEventData;
   createdAt: Date;
 }
 
@@ -64,7 +66,7 @@ export interface SystemMetric {
   metricName: string;
   metricValue: number;
   metricType: 'counter' | 'gauge' | 'histogram';
-  labels: Record<string, any>;
+  labels: SystemLabels;
   recordedAt: Date;
 }
 
@@ -74,7 +76,7 @@ export interface PerformanceLog {
   durationMs: number;
   success: boolean;
   sessionId?: string;
-  metadata: Record<string, any>;
+  metadata: PerformanceMetadata;
   createdAt: Date;
 }
 
@@ -82,7 +84,7 @@ export interface AnalyticsAggregation {
   id: string;
   aggregationType: 'session_stats' | 'handoff_stats' | 'performance_trends';
   timeBucket: Date;
-  aggregationData: Record<string, any>;
+  aggregationData: AggregationData;
   createdAt: Date;
 }
 

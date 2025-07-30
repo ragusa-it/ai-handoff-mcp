@@ -1,6 +1,7 @@
 import { db } from '../database/index.js';
 import { structuredLogger } from './structuredLogger.js';
 import { PerformanceTimer } from '../mcp/utils/performance.js';
+import { BaseMetadata, PerformanceMetadata, AggregationData } from '../types/common.js';
 
 // Health status interfaces
 export interface ComponentHealth {
@@ -8,7 +9,7 @@ export interface ComponentHealth {
   responseTime: number;
   lastCheck: Date;
   error?: string;
-  details?: Record<string, any>;
+  details?: BaseMetadata;
 }
 
 export interface HealthStatus {
@@ -39,7 +40,7 @@ export interface PerformanceMetrics {
   success: boolean;
   memoryUsage?: number;
   cpuUsage?: number;
-  metadata?: Record<string, any>;
+  metadata?: PerformanceMetadata;
 }
 
 export interface SystemMetrics {
@@ -94,7 +95,7 @@ export interface IMonitoringService {
   checkSystemHealth(): Promise<ComponentHealth>;
   
   // Metrics collection
-  recordToolCall(toolName: string, duration: number, success: boolean, metadata?: Record<string, any>): void;
+  recordToolCall(toolName: string, duration: number, success: boolean, metadata?: PerformanceMetadata): void;
   recordHandoffMetrics(sessionId: string, metrics: HandoffMetrics): void;
   recordPerformanceMetrics(operation: string, metrics: PerformanceMetrics): void;
   recordDatabaseQuery(query: string, duration: number, success: boolean): void;
@@ -107,7 +108,7 @@ export interface IMonitoringService {
   // Historical analysis and aggregation
   getMetricsAggregation(metricName: string, timeRange: { start: Date; end: Date }, aggregationType: 'avg' | 'sum' | 'count' | 'min' | 'max'): Promise<number>;
   getPerformanceTrends(operation: string, timeRange: { start: Date; end: Date }): Promise<Array<{ timestamp: Date; avgDuration: number; successRate: number }>>;
-  storeMetricsAggregation(aggregationType: string, timeBucket: Date, aggregationData: Record<string, any>): Promise<void>;
+  storeMetricsAggregation(aggregationType: string, timeBucket: Date, aggregationData: AggregationData): Promise<void>;
   
   // Configuration and lifecycle
   updateConfig(config: Partial<MonitoringConfig>): void;
@@ -469,7 +470,7 @@ export class MonitoringService implements IMonitoringService {
 
    * Record tool call metrics
    */
-  recordToolCall(toolName: string, duration: number, success: boolean, metadata?: Record<string, any>): void {
+  recordToolCall(toolName: string, duration: number, success: boolean, metadata?: PerformanceMetadata): void {
     try {
       // Update in-memory metrics
       const existing = this.metrics.toolCalls.get(toolName) || { count: 0, totalDuration: 0, errors: 0 };
@@ -1021,7 +1022,7 @@ export class MonitoringService implements IMonitoringService {
             successRate: (parseInt(row.successful_calls) / parseInt(row.total_calls)) * 100
           };
           return acc;
-        }, {} as Record<string, any>)
+        }, {} as BaseMetadata)
       };
 
       // Store the aggregation
@@ -1074,7 +1075,7 @@ export class MonitoringService implements IMonitoringService {
     duration: number,
     success: boolean,
     sessionId?: string,
-    metadata?: Record<string, any>
+    metadata?: PerformanceMetadata
   ): Promise<void> {
     try {
       await db.query(
@@ -1221,7 +1222,7 @@ export class MonitoringService implements IMonitoringService {
   async storeMetricsAggregation(
     aggregationType: string, 
     timeBucket: Date, 
-    aggregationData: Record<string, any>
+    aggregationData: AggregationData
   ): Promise<void> {
     try {
       await db.query(
