@@ -20,7 +20,24 @@ import { contextManagerService } from './services/contextManager.js';
 import { codebaseAnalyzerService } from './services/codebaseAnalyzer.js';
 import { backgroundJobScheduler } from './services/backgroundJobScheduler.js';
 import { monitoringService } from './services/monitoringService.js';
-import { analyticsService } from './services/analyticsService.js';
+import { 
+  analyticsService,
+  SessionStatistics,
+  HandoffAnalytics,
+  PerformanceTrends,
+  TrendAnalysisResult,
+  SessionAnomalyDetectionResult,
+  ResourceUtilization
+} from './services/analyticsService.js';
+
+// Union type for all possible analytics data types
+type AnalyticsData = 
+  | SessionStatistics 
+  | HandoffAnalytics 
+  | PerformanceTrends 
+  | TrendAnalysisResult 
+  | SessionAnomalyDetectionResult 
+  | ResourceUtilization;
 
 class AIHandoffMCPServer {
   private server: Server;
@@ -565,7 +582,7 @@ class AIHandoffMCPServer {
             end: new Date()
           };
           
-          let analyticsData: any;
+          let analyticsData: AnalyticsData;
           
           switch (analyticsType) {
             case 'sessions':
