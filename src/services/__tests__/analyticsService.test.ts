@@ -782,4 +782,257 @@ describe('AnalyticsService', () => {
       expect(result.sessionsByAgent).toEqual({});
     });
   });
+
+  // New tests for enhanced anomaly detection and recommendation engine (Task 5.2)
+  describe('Enhanced Anomaly Detection (Task 5.2)', () => {
+    it('should detect session duration anomalies', async () => {
+      // Reset mocks
+      mockDb.query.mockReset();
+      
+      // Mock session data with some anomalous durations
+      mockDb.query
+        .mockResolvedValueOnce({
+          rows: [
+            { status: 'active', count: '5', avg_duration_seconds: '300', avg_context_volume: '1000' },
+            { status: 'completed', count: '10', avg_duration_seconds: '1800', avg_context_volume: '2000' }
+          ],
+          rowCount: 2
+        })
+        .mockResolvedValueOnce({ rows: [], rowCount: 0 })
+        .mockResolvedValueOnce({
+          rows: [
+            { session_key: 'session1', created_at: '2023-01-01T10:00:00Z', updated_at: '2023-01-01T12:00:00Z', status: 'active', duration: '7200' }, // 2 hours
+            { session_key: 'session2', created_at: '2023-01-01T10:30:00Z', updated_at: '2023-01-01T15:30:00Z', status: 'completed', duration: '18000' } // 5 hours - anomaly
+          ],
+          rowCount: 2
+        })
+        .mockResolvedValueOnce({
+          rows: [
+            { total_handoffs: '5', successful_handoffs: '4', failed_handoffs: '1', avg_duration: '2000' }
+          ],
+          rowCount: 1
+        })
+        .mockResolvedValueOnce({ rows: [], rowCount: 0 })
+        .mockResolvedValueOnce({ rows: [], rowCount: 0 });
+
+      const result = await analyticsService.detectSessionAnomalies(defaultQuery);
+
+      expect(result).toBeDefined();
+      expect(result.anomalies).toBeDefined();
+      expect(result.patterns).toBeDefined();
+      expect(result.recommendations).toBeDefined();
+      expect(result.confidence).toBeGreaterThan(0);
+      
+      // Should detect session duration anomaly for session2 (5 hours is way above average)
+      const durationAnomaly = result.anomalies.find(a => a.type === 'session_duration');
+      expect(durationAnomaly).toBeDefined();
+      expect(durationAnomaly?.severity).toMatch(/medium|high|critical/);
+    });
+
+    it('should detect handoff pattern anomalies', async () => {
+      // Reset mocks
+      mockDb.query.mockReset();
+      
+      // Mock data with low success rate
+      mockDb.query
+        .mockResolvedValueOnce({
+          rows: [{ status: 'active', count: '10', avg_duration_seconds: '300', avg_context_volume: '1000' }],
+          rowCount: 1
+        })
+        .mockResolvedValueOnce({ rows: [], rowCount: 0 })
+        .mockResolvedValueOnce({
+          rows: [{ session_key: 'session1', created_at: '2023-01-01T10:00:00Z', updated_at: '2023-01-01T11:00:00Z', status: 'active', duration: '3600' }],
+          rowCount: 1
+        })
+        .mockResolvedValueOnce({
+          rows: [
+            { total_handoffs: '20', successful_handoffs: '12', failed_handoffs: '8', avg_duration: '1000' } // 60% success rate - anomaly
+          ],
+          rowCount: 1
+        })
+        .mockResolvedValueOnce({ rows: [], rowCount: 0 })
+        .mockResolvedValueOnce({ rows: [], rowCount: 0 });
+
+      const result = await analyticsService.detectSessionAnomalies(defaultQuery);
+
+      // Should detect handoff pattern anomaly due to low success rate (60% < 90%)
+      const handoffAnomaly = result.anomalies.find(a => a.type === 'handoff_pattern');
+      expect(handoffAnomaly).toBeDefined();
+      expect(handoffAnomaly?.description).toContain('success rate');
+    });
+
+    it('should generate advanced recommendations', async () => {
+      // Reset mocks
+      mockDb.query.mockReset();
+      
+      // Mock data that will trigger performance recommendations
+      mockDb.query
+        .mockResolvedValueOnce({
+          rows: [{ status: 'active', count: '5', avg_duration_seconds: '300', avg_context_volume: '1000' }],
+          rowCount: 1
+        })
+        .mockResolvedValueOnce({ rows: [], rowCount: 0 })
+        .mockResolvedValueOnce({
+          rows: [{ session_key: 'session1', created_at: '2023-01-01T10:00:00Z', updated_at: '2023-01-01T11:00:00Z', status: 'active', duration: '3600' }],
+          rowCount: 1
+        })
+        .mockResolvedValueOnce({
+          rows: [{ total_handoffs: '10', successful_handoffs: '9', failed_handoffs: '1', avg_duration: '1000' }],
+          rowCount: 1
+        })
+        .mockResolvedValueOnce({ rows: [], rowCount: 0 })
+        .mockResolvedValueOnce({
+          rows: [
+            { operation: 'slow_operation', count: '10', avg_duration: '2000', min_duration: '1000', max_duration: '5000', successful: '8' }
+          ],
+          rowCount: 1
+        });
+
+      const result = await analyticsService.detectSessionAnomalies(defaultQuery);
+
+      expect(result.recommendations).toBeDefined();
+      expect(result.recommendations.length).toBeGreaterThan(0);
+      
+      // Should have recommendations with proper structure
+      const recommendation = result.recommendations[0];
+      expect(recommendation).toHaveProperty('id');
+      expect(recommendation).toHaveProperty('type');
+      expect(recommendation).toHaveProperty('title');
+      expect(recommendation).toHaveProperty('description');
+      expect(recommendation).toHaveProperty('priority');
+      expect(recommendation).toHaveProperty('actions');
+      expect(recommendation.actions).toBeInstanceOf(Array);
+    });
+  });
+
+  describe('Enhanced Trend Analysis (Task 5.2)', () => {
+    it('should analyze comprehensive trends', async () => {
+      // Reset mocks
+      mockDb.query.mockReset();
+      
+      // Mock session stats
+      mockDb.query
+        .mockResolvedValueOnce({
+          rows: [{ status: 'active', count: '15', avg_duration_seconds: '400', avg_context_volume: '1200' }],
+          rowCount: 1
+        })
+        .mockResolvedValueOnce({ rows: [], rowCount: 0 })
+        .mockResolvedValueOnce({
+          rows: [{ total_handoffs: '12', successful_handoffs: '11', failed_handoffs: '1', avg_duration: '800' }],
+          rowCount: 1
+        })
+        .mockResolvedValueOnce({ rows: [], rowCount: 0 })
+        .mockResolvedValueOnce({ rows: [], rowCount: 0 });
+
+      const result = await analyticsService.analyzeTrends(defaultQuery);
+
+      expect(result).toBeDefined();
+      expect(result.sessionTrends).toBeDefined();
+      expect(result.performanceTrends).toBeDefined();
+      expect(result.usageTrends).toBeDefined();
+      expect(result.predictions).toBeDefined();
+
+      // Check session trends structure
+      expect(result.sessionTrends.sessionVolumeGrowth).toHaveProperty('direction');
+      expect(result.sessionTrends.sessionVolumeGrowth).toHaveProperty('slope');
+      expect(result.sessionTrends.sessionVolumeGrowth).toHaveProperty('confidence');
+      expect(result.sessionTrends.sessionVolumeGrowth).toHaveProperty('significance');
+
+      // Check predictions
+      expect(result.predictions).toBeInstanceOf(Array);
+      if (result.predictions.length > 0) {
+        const prediction = result.predictions[0];
+        expect(prediction).toHaveProperty('metric');
+        expect(prediction).toHaveProperty('timeframe');
+        expect(prediction).toHaveProperty('predictedValue');
+        expect(prediction).toHaveProperty('confidence');
+        expect(prediction).toHaveProperty('bounds');
+      }
+    });
+
+    it('should identify usage patterns', async () => {
+      // Reset mocks
+      mockDb.query.mockReset();
+      
+      mockDb.query
+        .mockResolvedValueOnce({
+          rows: [{ status: 'active', count: '20', avg_duration_seconds: '300', avg_context_volume: '1000' }],
+          rowCount: 1
+        })
+        .mockResolvedValueOnce({ rows: [], rowCount: 0 })
+        .mockResolvedValueOnce({
+          rows: [{ total_handoffs: '15', successful_handoffs: '14', failed_handoffs: '1', avg_duration: '700' }],
+          rowCount: 1
+        })
+        .mockResolvedValueOnce({ rows: [], rowCount: 0 })
+        .mockResolvedValueOnce({ rows: [], rowCount: 0 });
+
+      const result = await analyticsService.analyzeTrends(defaultQuery);
+
+      expect(result.usageTrends.peakUsagePatterns).toBeInstanceOf(Array);
+      expect(result.usageTrends.userBehaviorPatterns).toBeInstanceOf(Array);
+      expect(result.usageTrends.seasonalPatterns).toBeInstanceOf(Array);
+
+      // Check that patterns have expected structure
+      if (result.usageTrends.peakUsagePatterns.length > 0) {
+        const pattern = result.usageTrends.peakUsagePatterns[0];
+        expect(pattern).toHaveProperty('type');
+        expect(pattern).toHaveProperty('description');
+        expect(pattern).toHaveProperty('strength');
+      }
+    });
+  });
+
+  describe('Advanced Alerting System (Task 5.2)', () => {
+    it('should process alerts with configuration', async () => {
+      const alertConfig = {
+        enabled: true,
+        thresholds: {
+          memory: { warning: 80, critical: 90 },
+          cpu: { warning: 75, critical: 85 },
+          disk: { warning: 85, critical: 95 },
+          errorRate: { warning: 5, critical: 10 },
+          responseTime: { warning: 1000, critical: 2000 },
+          sessionGrowth: { warning: 50, critical: 100 }
+        },
+        escalation: {
+          timeToEscalate: 30,
+          maxEscalationLevel: 3,
+          escalationMultiplier: 2
+        },
+        channels: [
+          { type: 'log' as const, enabled: true, severityLevel: 'warning' as const },
+          { type: 'metric' as const, enabled: true, severityLevel: 'critical' as const }
+        ]
+      };
+
+      // This should not throw an error and should process successfully
+      await expect(analyticsService.processAlertsAndNotifications(alertConfig))
+        .resolves.not.toThrow();
+    });
+
+    it('should skip processing when disabled', async () => {
+      const alertConfig = {
+        enabled: false,
+        thresholds: {
+          memory: { warning: 80, critical: 90 },
+          cpu: { warning: 75, critical: 85 },
+          disk: { warning: 85, critical: 95 },
+          errorRate: { warning: 5, critical: 10 },
+          responseTime: { warning: 1000, critical: 2000 },
+          sessionGrowth: { warning: 50, critical: 100 }
+        },
+        escalation: {
+          timeToEscalate: 30,
+          maxEscalationLevel: 3,
+          escalationMultiplier: 2
+        },
+        channels: []
+      };
+
+      // Should return immediately without processing
+      await expect(analyticsService.processAlertsAndNotifications(alertConfig))
+        .resolves.not.toThrow();
+    });
+  });
 });

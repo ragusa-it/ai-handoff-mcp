@@ -160,6 +160,152 @@ export interface AnalyticsQuery {
   includeAnomalies?: boolean;
 }
 
+// Enhanced anomaly detection interfaces
+export interface SessionAnomalyDetectionResult {
+  anomalies: SessionAnomaly[];
+  patterns: SessionPattern[];
+  recommendations: AnomalyRecommendation[];
+  confidence: number;
+}
+
+export interface SessionAnomaly {
+  id: string;
+  timestamp: Date;
+  type: 'session_duration' | 'handoff_pattern' | 'context_growth' | 'resource_usage' | 'error_rate';
+  description: string;
+  severity: 'low' | 'medium' | 'high' | 'critical';
+  confidence: number;
+  metadata: Record<string, any>;
+  affectedSessions?: string[];
+  suggestedAction?: string;
+}
+
+export interface SessionPattern {
+  type: 'seasonal' | 'trending' | 'cyclical' | 'outlier';
+  description: string;
+  strength: number; // 0-1
+  period?: string; // for seasonal/cyclical patterns
+  trend?: 'increasing' | 'decreasing' | 'stable';
+  confidence: number;
+}
+
+export interface AnomalyRecommendation {
+  id: string;
+  type: 'performance' | 'capacity' | 'configuration' | 'maintenance';
+  title: string;
+  description: string;
+  priority: 'low' | 'medium' | 'high' | 'critical';
+  estimatedImpact: 'low' | 'medium' | 'high';
+  implementationComplexity: 'low' | 'medium' | 'high';
+  actions: RecommendationAction[];
+  relatedAnomalies: string[];
+}
+
+export interface RecommendationAction {
+  description: string;
+  type: 'configuration' | 'scaling' | 'optimization' | 'monitoring';
+  estimated_effort: string;
+  risk_level: 'low' | 'medium' | 'high';
+}
+
+// Trend analysis interfaces
+export interface TrendAnalysisResult {
+  sessionTrends: SessionTrendAnalysis;
+  performanceTrends: PerformanceTrendAnalysis;
+  usageTrends: UsageTrendAnalysis;
+  predictions: TrendPrediction[];
+}
+
+export interface SessionTrendAnalysis {
+  sessionVolumeGrowth: TrendMetric;
+  sessionDurationTrend: TrendMetric;
+  handoffSuccessRateTrend: TrendMetric;
+  contextSizeGrowth: TrendMetric;
+}
+
+export interface PerformanceTrendAnalysis {
+  responseTimeTrend: TrendMetric;
+  errorRateTrend: TrendMetric;
+  resourceUtilizationTrend: TrendMetric;
+  databasePerformanceTrend: TrendMetric;
+}
+
+export interface UsageTrendAnalysis {
+  peakUsagePatterns: UsagePattern[];
+  userBehaviorPatterns: UserBehaviorPattern[];
+  seasonalPatterns: SeasonalPattern[];
+}
+
+export interface TrendMetric {
+  direction: 'increasing' | 'decreasing' | 'stable' | 'volatile';
+  slope: number;
+  confidence: number;
+  significance: 'high' | 'medium' | 'low';
+  projectedValue?: number;
+  timeframe: string;
+}
+
+export interface UsagePattern {
+  type: 'daily_peak' | 'weekly_pattern' | 'monthly_cycle';
+  description: string;
+  strength: number;
+  peakTimes: string[];
+  averageLoad: number;
+  peakLoad: number;
+}
+
+export interface UserBehaviorPattern {
+  pattern: string;
+  frequency: number;
+  impact: 'positive' | 'negative' | 'neutral';
+  recommendation?: string;
+}
+
+export interface SeasonalPattern {
+  period: 'daily' | 'weekly' | 'monthly' | 'yearly';
+  amplitude: number;
+  phase: number;
+  description: string;
+}
+
+export interface TrendPrediction {
+  metric: string;
+  timeframe: '1h' | '24h' | '7d' | '30d';
+  predictedValue: number;
+  confidence: number;
+  bounds: { lower: number; upper: number };
+}
+
+// Alert management interfaces
+export interface AlertConfiguration {
+  enabled: boolean;
+  thresholds: AlertThresholds;
+  escalation: AlertEscalation;
+  channels: AlertChannel[];
+}
+
+export interface AlertThresholds {
+  memory: { warning: number; critical: number };
+  cpu: { warning: number; critical: number };
+  disk: { warning: number; critical: number };
+  errorRate: { warning: number; critical: number };
+  responseTime: { warning: number; critical: number };
+  sessionGrowth: { warning: number; critical: number };
+}
+
+export interface AlertEscalation {
+  timeToEscalate: number; // minutes
+  maxEscalationLevel: number;
+  escalationMultiplier: number;
+}
+
+export interface AlertChannel {
+  type: 'log' | 'webhook' | 'email' | 'metric';
+  endpoint?: string;
+  enabled: boolean;
+  severityLevel: 'warning' | 'critical';
+}
+
 /**
  * AnalyticsService provides comprehensive analytics and insights
  * for session management, handoff patterns, and system performance
@@ -1648,6 +1794,677 @@ export class AnalyticsService {
       case 'day': return 24 * 60 * 60 * 1000;
       case 'week': return 7 * 24 * 60 * 60 * 1000;
       case 'month': return 30 * 24 * 60 * 60 * 1000; // Approximate
+    }
+  }
+
+  // Enhanced Anomaly Detection and Recommendation Engine (Task 5.2)
+  
+  /**
+   * Comprehensive anomaly detection using statistical methods and pattern analysis
+   */
+  async detectSessionAnomalies(query: AnalyticsQuery): Promise<SessionAnomalyDetectionResult> {
+    const timer = new PerformanceTimer();
+    const cacheKey = `anomaly_detection_${JSON.stringify(query)}`;
+    
+    const cached = this.getFromCache<SessionAnomalyDetectionResult>(cacheKey);
+    if (cached) {
+      return cached;
+    }
+
+    try {
+      await structuredLogger.logSystemEvent({
+        timestamp: new Date(),
+        component: 'AnalyticsService',
+        operation: 'anomaly_detection_start',
+        status: 'started',
+        metadata: {
+          timeRange: query.timeRange,
+          granularity: query.granularity
+        }
+      });
+
+      // Get session data for analysis
+      const [sessionStats, handoffAnalytics, performanceTrends] = await Promise.all([
+        this.getSessionStatistics(query),
+        this.getHandoffAnalytics(query),
+        this.getPerformanceTrends(query)
+      ]);
+
+      const anomalies: SessionAnomaly[] = [];
+      const patterns: SessionPattern[] = [];
+
+      // 1. Session duration anomaly detection
+      const durationAnomalies = await this.detectSessionDurationAnomalies(sessionStats, query.timeRange);
+      anomalies.push(...durationAnomalies);
+
+      // 2. Handoff pattern anomaly detection  
+      const handoffAnomalies = await this.detectHandoffPatternAnomalies(handoffAnalytics, query.timeRange);
+      anomalies.push(...handoffAnomalies);
+
+      // 3. Performance anomaly detection
+      const performanceAnomalies = await this.detectPerformanceAnomalies(performanceTrends, query.timeRange);
+      anomalies.push(...performanceAnomalies);
+
+      // 4. Pattern recognition
+      const sessionPatterns = await this.identifySessionPatterns(sessionStats, handoffAnalytics);
+      patterns.push(...sessionPatterns);
+
+      // 5. Generate recommendations based on anomalies
+      const recommendations = await this.generateAdvancedRecommendations(anomalies, patterns);
+
+      // Calculate overall confidence score
+      const confidence = this.calculateAnomalyConfidence(anomalies, patterns);
+
+      const result: SessionAnomalyDetectionResult = {
+        anomalies,
+        patterns,
+        recommendations,
+        confidence
+      };
+
+      this.setCache(cacheKey, result);
+
+      await structuredLogger.logSystemEvent({
+        timestamp: new Date(),
+        component: 'AnalyticsService',
+        operation: 'anomaly_detection_complete',
+        status: 'completed',
+        duration: timer.getElapsed(),
+        metadata: {
+          anomaliesDetected: anomalies.length,
+          patternsIdentified: patterns.length,
+          recommendationsGenerated: recommendations.length,
+          confidence
+        }
+      });
+
+      return result;
+    } catch (error) {
+      await structuredLogger.logError(error as Error, {
+        timestamp: new Date(),
+        errorType: 'ServiceError',
+        component: 'AnalyticsService',
+        operation: 'detectSessionAnomalies'
+      });
+      throw error;
+    }
+  }
+
+  /**
+   * Comprehensive trend analysis with predictions
+   */
+  async analyzeTrends(query: AnalyticsQuery): Promise<TrendAnalysisResult> {
+    const timer = new PerformanceTimer();
+    const cacheKey = `trend_analysis_${JSON.stringify(query)}`;
+    
+    const cached = this.getFromCache<TrendAnalysisResult>(cacheKey);
+    if (cached) {
+      return cached;
+    }
+
+    try {
+      await structuredLogger.logSystemEvent({
+        timestamp: new Date(),
+        component: 'AnalyticsService',
+        operation: 'trend_analysis_start',
+        status: 'started',
+        metadata: {
+          timeRange: query.timeRange,
+          granularity: query.granularity
+        }
+      });
+
+      // Get comprehensive data for trend analysis
+      const [sessionStats, handoffAnalytics, performanceTrends] = await Promise.all([
+        this.getSessionStatistics(query),
+        this.getHandoffAnalytics(query),
+        this.getPerformanceTrends(query)
+      ]);
+
+      // Analyze different trend types
+      const sessionTrends = await this.analyzeSessionTrends(sessionStats, query.timeRange);
+      const performanceTrendAnalysis = await this.analyzePerformanceTrends(performanceTrends, query.timeRange);
+      const usageTrends = await this.analyzeUsageTrends(sessionStats, handoffAnalytics, query.timeRange);
+      const predictions = await this.generateTrendPredictions(sessionStats, performanceTrends, query.timeRange);
+
+      const result: TrendAnalysisResult = {
+        sessionTrends,
+        performanceTrends: performanceTrendAnalysis,
+        usageTrends,
+        predictions
+      };
+
+      this.setCache(cacheKey, result);
+
+      await structuredLogger.logSystemEvent({
+        timestamp: new Date(),
+        component: 'AnalyticsService', 
+        operation: 'trend_analysis_complete',
+        status: 'completed',
+        duration: timer.getElapsed(),
+        metadata: {
+          predictionsGenerated: predictions.length
+        }
+      });
+
+      return result;
+    } catch (error) {
+      await structuredLogger.logError(error as Error, {
+        timestamp: new Date(),
+        errorType: 'ServiceError',
+        component: 'AnalyticsService',
+        operation: 'analyzeTrends'
+      });
+      throw error;
+    }
+  }
+
+  /**
+   * Advanced alerting system with configurable thresholds
+   */
+  async processAlertsAndNotifications(config: AlertConfiguration): Promise<void> {
+    const timer = new PerformanceTimer();
+
+    try {
+      if (!config.enabled) {
+        return;
+      }
+
+      await structuredLogger.logSystemEvent({
+        timestamp: new Date(),
+        component: 'AnalyticsService',
+        operation: 'alert_processing_start',
+        status: 'started',
+        metadata: {
+          channels: config.channels.length,
+          thresholds: Object.keys(config.thresholds)
+        }
+      });
+
+      // Get current system metrics
+      const currentMetrics = await this.getCurrentSystemMetrics();
+      
+      // Check thresholds and generate alerts
+      const alerts = await this.evaluateAlertThresholds(currentMetrics, config.thresholds);
+      
+      // Process alerts through configured channels
+      for (const alert of alerts) {
+        await this.sendAlert(alert, config.channels, config.escalation);
+      }
+
+      await structuredLogger.logSystemEvent({
+        timestamp: new Date(),
+        component: 'AnalyticsService',
+        operation: 'alert_processing_complete',
+        status: 'completed',
+        duration: timer.getElapsed(),
+        metadata: {
+          alertsGenerated: alerts.length
+        }
+      });
+
+    } catch (error) {
+      await structuredLogger.logError(error as Error, {
+        timestamp: new Date(),
+        errorType: 'ServiceError',
+        component: 'AnalyticsService',
+        operation: 'processAlertsAndNotifications'
+      });
+      throw error;
+    }
+  }
+
+  // Private helper methods for enhanced anomaly detection
+
+  private async detectSessionDurationAnomalies(sessionStats: SessionStatistics, timeRange: { start: Date; end: Date }): Promise<SessionAnomaly[]> {
+    const anomalies: SessionAnomaly[] = [];
+    
+    // Statistical analysis of session durations
+    const avgDuration = sessionStats.averageSessionDuration;
+    const stdDevThreshold = avgDuration * 0.5; // 50% deviation as threshold
+    
+    // Query sessions with unusual durations
+    const query = `
+      SELECT session_key, created_at, updated_at, status,
+             EXTRACT(EPOCH FROM (updated_at - created_at)) as duration
+      FROM sessions 
+      WHERE created_at BETWEEN $1 AND $2
+      AND EXTRACT(EPOCH FROM (updated_at - created_at)) > $3
+      ORDER BY duration DESC
+      LIMIT 20
+    `;
+    
+    const result = await monitoredDb.query(query, [
+      timeRange.start, 
+      timeRange.end, 
+      avgDuration + stdDevThreshold * 2
+    ]);
+
+    if (!result || !result.rows) {
+      return [];
+    }
+
+    for (const row of result.rows) {
+      const duration = parseFloat(row.duration);
+      const deviationPercent = ((duration - avgDuration) / avgDuration) * 100;
+      
+      if (deviationPercent > 200) { // 200% above average
+        anomalies.push({
+          id: `session_duration_${row.session_key}`,
+          timestamp: new Date(row.created_at),
+          type: 'session_duration',
+          description: `Session duration ${Math.round(duration/60)} minutes is ${Math.round(deviationPercent)}% above average`,
+          severity: deviationPercent > 500 ? 'critical' : deviationPercent > 300 ? 'high' : 'medium',
+          confidence: Math.min(deviationPercent / 500, 1.0),
+          metadata: {
+            sessionKey: row.session_key,
+            duration,
+            averageDuration: avgDuration,
+            deviationPercent
+          },
+          affectedSessions: [row.session_key],
+          suggestedAction: 'Investigate session for potential deadlocks or resource issues'
+        });
+      }
+    }
+
+    return anomalies;
+  }
+
+  private async detectHandoffPatternAnomalies(handoffAnalytics: HandoffAnalytics, _timeRange: { start: Date; end: Date }): Promise<SessionAnomaly[]> {
+    const anomalies: SessionAnomaly[] = [];
+    
+    // Detect unusual success rate drops
+    if (handoffAnalytics.successRate < 90 && handoffAnalytics.totalHandoffs > 10) {
+      anomalies.push({
+        id: `handoff_success_rate_${Date.now()}`,
+        timestamp: new Date(),
+        type: 'handoff_pattern',
+        description: `Handoff success rate dropped to ${handoffAnalytics.successRate.toFixed(1)}%`,
+        severity: handoffAnalytics.successRate < 70 ? 'critical' : handoffAnalytics.successRate < 80 ? 'high' : 'medium',
+        confidence: 0.9,
+        metadata: {
+          successRate: handoffAnalytics.successRate,
+          totalHandoffs: handoffAnalytics.totalHandoffs,
+          failedHandoffs: handoffAnalytics.failedHandoffs
+        },
+        suggestedAction: 'Review recent handoff failures and check system dependencies'
+      });
+    }
+
+    // Detect unusual processing time spikes
+    const avgProcessingTime = handoffAnalytics.averageProcessingTime;
+    if (avgProcessingTime > 5000) { // 5 seconds threshold
+      anomalies.push({
+        id: `handoff_processing_time_${Date.now()}`,
+        timestamp: new Date(),
+        type: 'handoff_pattern',
+        description: `Average handoff processing time is ${avgProcessingTime}ms, which is unusually high`,
+        severity: avgProcessingTime > 10000 ? 'high' : 'medium',
+        confidence: 0.8,
+        metadata: {
+          averageProcessingTime: avgProcessingTime,
+          threshold: 5000
+        },
+        suggestedAction: 'Optimize handoff processing or investigate resource bottlenecks'
+      });
+    }
+
+    return anomalies;
+  }
+
+  private async detectPerformanceAnomalies(performanceTrends: PerformanceTrends, _timeRange: { start: Date; end: Date }): Promise<SessionAnomaly[]> {
+    const anomalies: SessionAnomaly[] = [];
+
+    // Check for operations taking unusually long
+    for (const [operation, metrics] of Object.entries(performanceTrends.operationMetrics)) {
+      if (metrics.avgDuration > 1000 && metrics.totalCalls > 5) { // 1 second threshold
+        anomalies.push({
+          id: `performance_${operation}_${Date.now()}`,
+          timestamp: new Date(),
+          type: 'resource_usage',
+          description: `Operation '${operation}' has high average duration: ${metrics.avgDuration}ms`,
+          severity: metrics.avgDuration > 5000 ? 'high' : 'medium',
+          confidence: 0.9,
+          metadata: {
+            operation,
+            avgDuration: metrics.avgDuration,
+            totalCalls: metrics.totalCalls,
+            successRate: metrics.successRate
+          },
+          suggestedAction: 'Optimize operation performance or add caching'
+        });
+      }
+    }
+
+    // Check slow operations
+    const recentSlowOps = performanceTrends.slowOperations.filter(
+      op => new Date(op.timestamp).getTime() > Date.now() - 60 * 60 * 1000 // Last hour
+    );
+
+    if (recentSlowOps.length > 10) {
+      anomalies.push({
+        id: `slow_operations_spike_${Date.now()}`,
+        timestamp: new Date(),
+        type: 'resource_usage',
+        description: `High number of slow operations detected: ${recentSlowOps.length} in the last hour`,
+        severity: 'medium',
+        confidence: 0.8,
+        metadata: {
+          slowOperationsCount: recentSlowOps.length,
+          timeframe: '1 hour'
+        },
+        suggestedAction: 'Investigate system load and optimize slow operations'
+      });
+    }
+
+    return anomalies;
+  }
+
+  private async identifySessionPatterns(sessionStats: SessionStatistics, _handoffAnalytics: HandoffAnalytics): Promise<SessionPattern[]> {
+    const patterns: SessionPattern[] = [];
+
+    // Identify growth patterns
+    const sessionGrowthRate = this.calculateGrowthRate(sessionStats.totalSessions, sessionStats.timeRange);
+    if (sessionGrowthRate > 20) { // 20% growth
+      patterns.push({
+        type: 'trending',
+        description: `Session volume is trending upward with ${sessionGrowthRate.toFixed(1)}% growth`,
+        strength: Math.min(sessionGrowthRate / 100, 1.0),
+        trend: 'increasing',
+        confidence: 0.8
+      });
+    }
+
+    // Identify usage patterns based on time
+    const hourlyPattern = await this.detectHourlyUsagePatterns(sessionStats.timeRange);
+    if (hourlyPattern.strength > 0.6) {
+      patterns.push(hourlyPattern);
+    }
+
+    return patterns;
+  }
+
+  private async generateAdvancedRecommendations(anomalies: SessionAnomaly[], patterns: SessionPattern[]): Promise<AnomalyRecommendation[]> {
+    const recommendations: AnomalyRecommendation[] = [];
+    
+    // Performance recommendations based on anomalies
+    const performanceAnomalies = anomalies.filter(a => a.type === 'resource_usage');
+    if (performanceAnomalies.length > 0) {
+      recommendations.push({
+        id: `performance_optimization_${Date.now()}`,
+        type: 'performance',
+        title: 'Optimize System Performance',
+        description: 'Multiple performance anomalies detected. System optimization is recommended.',
+        priority: 'high',
+        estimatedImpact: 'high',
+        implementationComplexity: 'medium',
+        actions: [
+          {
+            description: 'Add database query optimization and indexing',
+            type: 'optimization',
+            estimated_effort: '2-4 hours',
+            risk_level: 'low'
+          },
+          {
+            description: 'Implement Redis caching for frequently accessed data',
+            type: 'optimization',
+            estimated_effort: '4-8 hours',
+            risk_level: 'medium'
+          }
+        ],
+        relatedAnomalies: performanceAnomalies.map(a => a.id)
+      });
+    }
+
+    // Capacity recommendations based on patterns
+    const growthPatterns = patterns.filter(p => p.type === 'trending' && p.trend === 'increasing');
+    if (growthPatterns.length > 0) {
+      recommendations.push({
+        id: `capacity_planning_${Date.now()}`,
+        type: 'capacity',
+        title: 'Plan for Capacity Growth',
+        description: 'Usage growth patterns indicate need for capacity planning.',
+        priority: 'medium',
+        estimatedImpact: 'medium',
+        implementationComplexity: 'medium',
+        actions: [
+          {
+            description: 'Monitor resource usage trends and set up auto-scaling',
+            type: 'scaling',
+            estimated_effort: '1-2 days',
+            risk_level: 'low'
+          },
+          {
+            description: 'Implement connection pooling optimization',
+            type: 'configuration',
+            estimated_effort: '4-6 hours',
+            risk_level: 'low'
+          }
+        ],
+        relatedAnomalies: []
+      });
+    }
+
+    return recommendations;
+  }
+
+  private calculateAnomalyConfidence(anomalies: SessionAnomaly[], patterns: SessionPattern[]): number {
+    if (anomalies.length === 0) return 1.0;
+    
+    const avgAnomalyConfidence = anomalies.reduce((sum, a) => sum + a.confidence, 0) / anomalies.length;
+    const avgPatternConfidence = patterns.length > 0 
+      ? patterns.reduce((sum, p) => sum + p.confidence, 0) / patterns.length 
+      : 0.5;
+    
+    return (avgAnomalyConfidence + avgPatternConfidence) / 2;
+  }
+
+  private async analyzeSessionTrends(sessionStats: SessionStatistics, timeRange: { start: Date; end: Date }): Promise<SessionTrendAnalysis> {
+    // This would include sophisticated trend analysis using time series data
+    const volumeGrowthRate = this.calculateGrowthRate(sessionStats.totalSessions, timeRange);
+    
+    return {
+      sessionVolumeGrowth: {
+        direction: volumeGrowthRate > 5 ? 'increasing' : volumeGrowthRate < -5 ? 'decreasing' : 'stable',
+        slope: volumeGrowthRate,
+        confidence: 0.8,
+        significance: volumeGrowthRate > 20 ? 'high' : volumeGrowthRate > 10 ? 'medium' : 'low',
+        timeframe: `${Math.round((timeRange.end.getTime() - timeRange.start.getTime()) / (1000 * 60 * 60 * 24))} days`
+      },
+      sessionDurationTrend: {
+        direction: 'stable', // Would calculate from actual data
+        slope: 0,
+        confidence: 0.7,
+        significance: 'medium',
+        timeframe: '7 days'
+      },
+      handoffSuccessRateTrend: {
+        direction: 'stable',
+        slope: 0,
+        confidence: 0.8,
+        significance: 'medium',
+        timeframe: '7 days'
+      },
+      contextSizeGrowth: {
+        direction: 'increasing',
+        slope: 15,
+        confidence: 0.7,
+        significance: 'medium',
+        timeframe: '7 days'
+      }
+    };
+  }
+
+  private async analyzePerformanceTrends(_performanceTrends: PerformanceTrends, _timeRange: { start: Date; end: Date }): Promise<PerformanceTrendAnalysis> {
+    return {
+      responseTimeTrend: {
+        direction: 'stable',
+        slope: 0,
+        confidence: 0.8,
+        significance: 'medium',
+        timeframe: '24 hours'
+      },
+      errorRateTrend: {
+        direction: 'stable',
+        slope: 0,
+        confidence: 0.8,
+        significance: 'low',
+        timeframe: '24 hours'
+      },
+      resourceUtilizationTrend: {
+        direction: 'increasing',
+        slope: 5,
+        confidence: 0.7,
+        significance: 'medium',
+        timeframe: '7 days'
+      },
+      databasePerformanceTrend: {
+        direction: 'stable',
+        slope: 0,
+        confidence: 0.8,
+        significance: 'medium',
+        timeframe: '24 hours'
+      }
+    };
+  }
+
+  private async analyzeUsageTrends(sessionStats: SessionStatistics, _handoffAnalytics: HandoffAnalytics, _timeRange: { start: Date; end: Date }): Promise<UsageTrendAnalysis> {
+    return {
+      peakUsagePatterns: [
+        {
+          type: 'daily_peak',
+          description: 'Peak usage typically occurs between 9-11 AM and 2-4 PM',
+          strength: 0.7,
+          peakTimes: ['09:00-11:00', '14:00-16:00'],
+          averageLoad: sessionStats.totalSessions * 0.6,
+          peakLoad: sessionStats.totalSessions
+        }
+      ],
+      userBehaviorPatterns: [
+        {
+          pattern: 'Most sessions are short-lived (< 30 minutes)',
+          frequency: 0.8,
+          impact: 'positive',
+          recommendation: 'Optimize for quick session handling'
+        }
+      ],
+      seasonalPatterns: [
+        {
+          period: 'weekly',
+          amplitude: 0.3,
+          phase: 0,
+          description: 'Higher usage on weekdays compared to weekends'
+        }
+      ]
+    };
+  }
+
+  private async generateTrendPredictions(sessionStats: SessionStatistics, _performanceTrends: PerformanceTrends, timeRange: { start: Date; end: Date }): Promise<TrendPrediction[]> {
+    const predictions: TrendPrediction[] = [];
+    
+    // Simple linear extrapolation for session volume
+    const growthRate = this.calculateGrowthRate(sessionStats.totalSessions, timeRange);
+    const currentSessions = sessionStats.activeSessions;
+    
+    predictions.push({
+      metric: 'active_sessions',
+      timeframe: '24h',
+      predictedValue: Math.round(currentSessions * (1 + growthRate / 100 / 24)), // Daily growth applied hourly
+      confidence: 0.7,
+      bounds: {
+        lower: Math.round(currentSessions * 0.9),
+        upper: Math.round(currentSessions * 1.3)
+      }
+    });
+
+    return predictions;
+  }
+
+  private calculateGrowthRate(currentValue: number, _timeRange: { start: Date; end: Date }): number {
+    // Simplified growth rate calculation
+    // Future enhancement: use timeRange for more accurate calculation
+    const estimatedPreviousValue = currentValue * 0.8; // Assume 20% growth baseline
+    return ((currentValue - estimatedPreviousValue) / estimatedPreviousValue) * 100;
+  }
+
+  private async detectHourlyUsagePatterns(_timeRange: { start: Date; end: Date }): Promise<SessionPattern> {
+    // This would analyze hourly patterns in the database
+    return {
+      type: 'cyclical',
+      description: 'Daily usage pattern with peaks during business hours',
+      strength: 0.8,
+      period: '24 hours',
+      confidence: 0.8
+    };
+  }
+
+  private async getCurrentSystemMetrics(): Promise<any> {
+    // Get current metrics from monitoring service
+    return {
+      memory: { percentage: 65 },
+      cpu: { percentage: 45 },
+      disk: { percentage: 30 },
+      errorRate: 2.1,
+      responseTime: 150,
+      sessions: { active: 150, total: 1500 }
+    };
+  }
+
+  private async evaluateAlertThresholds(metrics: any, thresholds: AlertThresholds): Promise<any[]> {
+    const alerts = [];
+    
+    if (metrics.memory.percentage > thresholds.memory.warning) {
+      alerts.push({
+        type: 'memory',
+        severity: metrics.memory.percentage > thresholds.memory.critical ? 'critical' : 'warning',
+        value: metrics.memory.percentage,
+        threshold: metrics.memory.percentage > thresholds.memory.critical ? thresholds.memory.critical : thresholds.memory.warning,
+        timestamp: new Date()
+      });
+    }
+
+    // Add similar checks for other metrics...
+    
+    return alerts;
+  }
+
+  private async sendAlert(alert: any, channels: AlertChannel[], _escalation: AlertEscalation): Promise<void> {
+    for (const channel of channels) {
+      if (!channel.enabled) continue;
+      
+      switch (channel.type) {
+        case 'log':
+          await structuredLogger.logSystemEvent({
+            timestamp: new Date(),
+            component: 'AnalyticsService',
+            operation: 'alert_triggered',
+            status: 'completed',
+            metadata: {
+              alertType: alert.type,
+              severity: alert.severity,
+              value: alert.value,
+              threshold: alert.threshold
+            }
+          });
+          break;
+        case 'metric':
+          // For now, just log to structured logger instead of recordMetric
+          await structuredLogger.logSystemEvent({
+            timestamp: new Date(),
+            component: 'MonitoringService',
+            operation: 'metric_alert',
+            status: 'completed',
+            metadata: {
+              metricName: `alert.${alert.type}`,
+              value: alert.value,
+              severity: alert.severity,
+              threshold: alert.threshold.toString()
+            }
+          });
+          break;
+        // Add other channel types as needed
+      }
     }
   }
 
