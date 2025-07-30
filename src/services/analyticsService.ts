@@ -1411,43 +1411,68 @@ export class AnalyticsService {
       GROUP BY operation
     `;
 
-    const result = await monitoredDb.query(query, [timeRange.start, timeRange.end]);
+    try {
+      const result = await monitoredDb.query(query, [timeRange.start, timeRange.end]);
 
-    let totalQueries = 0;
-    let slowQueries = 0;
-    let totalDuration = 0;
-    let failedQueries = 0;
-    const topSlowQueries: Array<{ queryPattern: string; avgDuration: number; count: number }> = [];
-
-    for (const row of result.rows) {
-      const queries = parseInt(row.total_queries);
-      const slow = parseInt(row.slow_queries);
-      const avgTime = parseFloat(row.avg_query_time);
-      const failed = parseInt(row.failed_queries);
-
-      totalQueries += queries;
-      slowQueries += slow;
-      totalDuration += avgTime * queries;
-      failedQueries += failed;
-
-      if (slow > 0) {
-        topSlowQueries.push({
-          queryPattern: row.operation,
-          avgDuration: avgTime,
-          count: slow
-        });
+      if (!result || !result.rows) {
+        return {
+          totalQueries: 0,
+          slowQueries: 0,
+          avgQueryTime: 0,
+          errorRate: 0,
+          connectionPoolUsage: 0,
+          cacheHitRate: 0,
+          topSlowQueries: []
+        };
       }
-    }
 
-    return {
-      totalQueries,
-      slowQueries,
-      avgQueryTime: totalQueries > 0 ? totalDuration / totalQueries : 0,
-      errorRate: totalQueries > 0 ? (failedQueries / totalQueries) * 100 : 0,
-      connectionPoolUsage: 0, // Would need actual connection pool monitoring
-      cacheHitRate: 0, // Would need actual cache monitoring
-      topSlowQueries: topSlowQueries.sort((a, b) => b.avgDuration - a.avgDuration).slice(0, 10)
-    };
+      let totalQueries = 0;
+      let slowQueries = 0;
+      let totalDuration = 0;
+      let failedQueries = 0;
+      const topSlowQueries: Array<{ queryPattern: string; avgDuration: number; count: number }> = [];
+
+      for (const row of result.rows) {
+        const queries = parseInt(row.total_queries) || 0;
+        const slow = parseInt(row.slow_queries) || 0;
+        const avgTime = parseFloat(row.avg_query_time) || 0;
+        const failed = parseInt(row.failed_queries) || 0;
+
+        totalQueries += queries;
+        slowQueries += slow;
+        totalDuration += avgTime * queries;
+        failedQueries += failed;
+
+        if (slow > 0) {
+          topSlowQueries.push({
+            queryPattern: row.operation,
+            avgDuration: avgTime,
+            count: slow
+          });
+        }
+      }
+
+      return {
+        totalQueries,
+        slowQueries,
+        avgQueryTime: totalQueries > 0 ? totalDuration / totalQueries : 0,
+        errorRate: totalQueries > 0 ? (failedQueries / totalQueries) * 100 : 0,
+        connectionPoolUsage: 0, // Would need actual connection pool monitoring
+        cacheHitRate: 0, // Would need actual cache monitoring
+        topSlowQueries: topSlowQueries.sort((a, b) => b.avgDuration - a.avgDuration).slice(0, 10)
+      };
+    } catch (error) {
+      // Return default metrics if query fails
+      return {
+        totalQueries: 0,
+        slowQueries: 0,
+        avgQueryTime: 0,
+        errorRate: 0,
+        connectionPoolUsage: 0,
+        cacheHitRate: 0,
+        topSlowQueries: []
+      };
+    }
   }
 
   private detectContextAnomalies(
