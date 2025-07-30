@@ -306,6 +306,23 @@ export interface AlertChannel {
   severityLevel: 'warning' | 'critical';
 }
 
+export interface Alert {
+  type: string;
+  severity: 'warning' | 'critical';
+  value: number;
+  threshold: number;
+  timestamp: Date;
+}
+
+export interface SystemMetrics {
+  memory: { percentage: number };
+  cpu: { percentage: number };
+  disk: { percentage: number };
+  errorRate: number;
+  responseTime: number;
+  sessions: { active: number; total: number };
+}
+
 /**
  * AnalyticsService provides comprehensive analytics and insights
  * for session management, handoff patterns, and system performance
@@ -753,14 +770,12 @@ export class AnalyticsService {
       // Process content type distribution
       const contentTypeStats: Record<string, ContextTypeStats> = {};
       let totalEntries = 0;
-      let totalSize = 0;
 
       for (const row of contextData.rows) {
         const contextType = row.context_type;
         const size = parseInt(row.content_size_bytes) || 0;
 
         totalEntries++;
-        totalSize += size;
 
         if (!contentTypeStats[contextType]) {
           contentTypeStats[contextType] = {
@@ -1863,15 +1878,15 @@ export class AnalyticsService {
       anomalies.push(...durationAnomalies);
 
       // 2. Handoff pattern anomaly detection  
-      const handoffAnomalies = await this.detectHandoffPatternAnomalies(handoffAnalytics, query.timeRange);
+      const handoffAnomalies = await this.detectHandoffPatternAnomalies(handoffAnalytics);
       anomalies.push(...handoffAnomalies);
 
       // 3. Performance anomaly detection
-      const performanceAnomalies = await this.detectPerformanceAnomalies(performanceTrends, query.timeRange);
+      const performanceAnomalies = await this.detectPerformanceAnomalies(performanceTrends);
       anomalies.push(...performanceAnomalies);
 
       // 4. Pattern recognition
-      const sessionPatterns = await this.identifySessionPatterns(sessionStats, handoffAnalytics);
+      const sessionPatterns = await this.identifySessionPatterns(sessionStats);
       patterns.push(...sessionPatterns);
 
       // 5. Generate recommendations based on anomalies
@@ -1940,16 +1955,15 @@ export class AnalyticsService {
       });
 
       // Get comprehensive data for trend analysis
-      const [sessionStats, handoffAnalytics, performanceTrends] = await Promise.all([
+      const [sessionStats, performanceTrends] = await Promise.all([
         this.getSessionStatistics(query),
-        this.getHandoffAnalytics(query),
         this.getPerformanceTrends(query)
       ]);
 
       // Analyze different trend types
       const sessionTrends = await this.analyzeSessionTrends(sessionStats, query.timeRange);
-      const performanceTrendAnalysis = await this.analyzePerformanceTrends(performanceTrends, query.timeRange);
-      const usageTrends = await this.analyzeUsageTrends(sessionStats, handoffAnalytics, query.timeRange);
+      const performanceTrendAnalysis = await this.analyzePerformanceTrends();
+      const usageTrends = await this.analyzeUsageTrends(sessionStats);
       const predictions = await this.generateTrendPredictions(sessionStats, performanceTrends, query.timeRange);
 
       const result: TrendAnalysisResult = {
@@ -2014,7 +2028,7 @@ export class AnalyticsService {
       
       // Process alerts through configured channels
       for (const alert of alerts) {
-        await this.sendAlert(alert, config.channels, config.escalation);
+        await this.sendAlert(alert, config.channels);
       }
 
       await structuredLogger.logSystemEvent({
@@ -2096,7 +2110,7 @@ export class AnalyticsService {
     return anomalies;
   }
 
-  private async detectHandoffPatternAnomalies(handoffAnalytics: HandoffAnalytics, _timeRange: { start: Date; end: Date }): Promise<SessionAnomaly[]> {
+  private async detectHandoffPatternAnomalies(handoffAnalytics: HandoffAnalytics): Promise<SessionAnomaly[]> {
     const anomalies: SessionAnomaly[] = [];
     
     // Detect unusual success rate drops
@@ -2138,7 +2152,7 @@ export class AnalyticsService {
     return anomalies;
   }
 
-  private async detectPerformanceAnomalies(performanceTrends: PerformanceTrends, _timeRange: { start: Date; end: Date }): Promise<SessionAnomaly[]> {
+  private async detectPerformanceAnomalies(performanceTrends: PerformanceTrends): Promise<SessionAnomaly[]> {
     const anomalies: SessionAnomaly[] = [];
 
     // Check for operations taking unusually long
@@ -2186,11 +2200,11 @@ export class AnalyticsService {
     return anomalies;
   }
 
-  private async identifySessionPatterns(sessionStats: SessionStatistics, _handoffAnalytics: HandoffAnalytics): Promise<SessionPattern[]> {
+  private async identifySessionPatterns(sessionStats: SessionStatistics): Promise<SessionPattern[]> {
     const patterns: SessionPattern[] = [];
 
     // Identify growth patterns
-    const sessionGrowthRate = this.calculateGrowthRate(sessionStats.totalSessions, sessionStats.timeRange);
+    const sessionGrowthRate = this.calculateGrowthRate(sessionStats.totalSessions);
     if (sessionGrowthRate > 20) { // 20% growth
       patterns.push({
         type: 'trending',
@@ -2202,7 +2216,7 @@ export class AnalyticsService {
     }
 
     // Identify usage patterns based on time
-    const hourlyPattern = await this.detectHourlyUsagePatterns(sessionStats.timeRange);
+    const hourlyPattern = await this.detectHourlyUsagePatterns();
     if (hourlyPattern.strength > 0.6) {
       patterns.push(hourlyPattern);
     }
@@ -2287,7 +2301,7 @@ export class AnalyticsService {
 
   private async analyzeSessionTrends(sessionStats: SessionStatistics, timeRange: { start: Date; end: Date }): Promise<SessionTrendAnalysis> {
     // This would include sophisticated trend analysis using time series data
-    const volumeGrowthRate = this.calculateGrowthRate(sessionStats.totalSessions, timeRange);
+    const volumeGrowthRate = this.calculateGrowthRate(sessionStats.totalSessions);
     
     return {
       sessionVolumeGrowth: {
@@ -2321,7 +2335,7 @@ export class AnalyticsService {
     };
   }
 
-  private async analyzePerformanceTrends(_performanceTrends: PerformanceTrends, _timeRange: { start: Date; end: Date }): Promise<PerformanceTrendAnalysis> {
+  private async analyzePerformanceTrends(): Promise<PerformanceTrendAnalysis> {
     return {
       responseTimeTrend: {
         direction: 'stable',
@@ -2354,7 +2368,7 @@ export class AnalyticsService {
     };
   }
 
-  private async analyzeUsageTrends(sessionStats: SessionStatistics, _handoffAnalytics: HandoffAnalytics, _timeRange: { start: Date; end: Date }): Promise<UsageTrendAnalysis> {
+  private async analyzeUsageTrends(sessionStats: SessionStatistics): Promise<UsageTrendAnalysis> {
     return {
       peakUsagePatterns: [
         {
@@ -2385,11 +2399,11 @@ export class AnalyticsService {
     };
   }
 
-  private async generateTrendPredictions(sessionStats: SessionStatistics, _performanceTrends: PerformanceTrends, timeRange: { start: Date; end: Date }): Promise<TrendPrediction[]> {
+  private async generateTrendPredictions(sessionStats: SessionStatistics, _performanceTrends: PerformanceTrends, _timeRange: { start: Date; end: Date }): Promise<TrendPrediction[]> {
     const predictions: TrendPrediction[] = [];
     
     // Simple linear extrapolation for session volume
-    const growthRate = this.calculateGrowthRate(sessionStats.totalSessions, timeRange);
+    const growthRate = this.calculateGrowthRate(sessionStats.totalSessions);
     const currentSessions = sessionStats.activeSessions;
     
     predictions.push({
@@ -2406,14 +2420,14 @@ export class AnalyticsService {
     return predictions;
   }
 
-  private calculateGrowthRate(currentValue: number, _timeRange: { start: Date; end: Date }): number {
+  private calculateGrowthRate(currentValue: number): number {
     // Simplified growth rate calculation
     // Future enhancement: use timeRange for more accurate calculation
     const estimatedPreviousValue = currentValue * 0.8; // Assume 20% growth baseline
     return ((currentValue - estimatedPreviousValue) / estimatedPreviousValue) * 100;
   }
 
-  private async detectHourlyUsagePatterns(_timeRange: { start: Date; end: Date }): Promise<SessionPattern> {
+  private async detectHourlyUsagePatterns(): Promise<SessionPattern> {
     // This would analyze hourly patterns in the database
     return {
       type: 'cyclical',
@@ -2424,7 +2438,7 @@ export class AnalyticsService {
     };
   }
 
-  private async getCurrentSystemMetrics(): Promise<any> {
+  private async getCurrentSystemMetrics(): Promise<SystemMetrics> {
     // Get current metrics from monitoring service
     return {
       memory: { percentage: 65 },
@@ -2436,8 +2450,8 @@ export class AnalyticsService {
     };
   }
 
-  private async evaluateAlertThresholds(metrics: any, thresholds: AlertThresholds): Promise<any[]> {
-    const alerts = [];
+  private async evaluateAlertThresholds(metrics: SystemMetrics, thresholds: AlertThresholds): Promise<Alert[]> {
+    const alerts: Alert[] = [];
     
     if (metrics.memory.percentage > thresholds.memory.warning) {
       alerts.push({
@@ -2454,7 +2468,7 @@ export class AnalyticsService {
     return alerts;
   }
 
-  private async sendAlert(alert: any, channels: AlertChannel[], _escalation: AlertEscalation): Promise<void> {
+  private async sendAlert(alert: Alert, channels: AlertChannel[]): Promise<void> {
     for (const channel of channels) {
       if (!channel.enabled) continue;
       
