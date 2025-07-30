@@ -158,3 +158,71 @@ Background job system for:
 ## MCP Tools
 
 Use all MCP tools at your disposal
+
+---
+
+## AI Development Team Configuration
+*Configured by team-configurator on 2025-07-30*
+
+**Detected Stack**: Node.js + TypeScript, PostgreSQL, Redis, MCP Protocol, Jest Testing
+
+### Specialist Assignments
+
+- **API Architecture & MCP Protocol** → @api-architect
+  - MCP tool design, protocol implementation
+  - RESTful patterns, resource endpoints
+  - Schema validation and error handling
+
+- **Backend Services & Logic** → @backend-developer  
+  - Service layer implementation (contextManager, codebaseAnalyzer)
+  - Database integration patterns
+  - Background job scheduling and monitoring
+
+- **Database Design & Optimization** → @backend-developer
+  - PostgreSQL schema design and migrations
+  - Redis caching strategies
+  - Query optimization and indexing
+
+- **Code Quality & Reviews** → @code-reviewer
+  - TypeScript best practices
+  - Architecture pattern validation
+  - Security and performance review
+
+- **Performance & Monitoring** → @performance-optimizer
+  - Database connection pooling
+  - Caching strategy optimization
+  - Session monitoring and analytics
+
+- **Documentation & Specs** → @documentation-specialist
+  - Technical documentation
+  - API documentation
+  - Code comments and JSDoc
+
+### How to Use Your Specialized Team
+
+**For MCP Protocol Work:**
+- "Design a new MCP tool for session analytics"
+- "Review the tool handler error handling patterns"
+- "Optimize the resource endpoint implementations"
+
+**For Backend Development:**
+- "Implement a new service for user management"
+- "Add background job processing for data cleanup"
+- "Create monitoring endpoints for system health"
+
+**For Database Work:**
+- "Design schema for enhanced session tracking"
+- "Optimize context history queries with better indexing"
+- "Implement Redis caching for frequent lookups"
+
+**For Code Quality:**
+- "Review my TypeScript service implementations"
+- "Check MCP tool handlers for proper error handling"
+- "Validate the database connection patterns"
+
+**For Performance:**
+- "Analyze database query performance bottlenecks"
+- "Optimize Redis usage patterns"
+- "Review memory usage in context processing"
+
+Your specialized AI development team is configured and ready to help with your MCP server project!

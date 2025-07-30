@@ -1,15 +1,19 @@
 # AI Handoff MCP Server
 
-A Model Context Protocol (MCP) server for seamless context transfer between AI agents, enabling efficient handoffs with complete conversation history and codebase analysis.
+A Model Context Protocol (MCP) server for seamless context transfer between AI agents, enabling efficient handoffs with complete conversation history, codebase analysis, and comprehensive session monitoring capabilities.
 
 ## Features
 
-- 🔄 **Session Management**: Create and manage handoff sessions between AI agents
-- 📝 **Context History**: Track complete conversation history with different content types
+- 🔄 **Session Management**: Create and manage handoff sessions with lifecycle tracking and automatic expiration
+- 📝 **Context History**: Track complete conversation history with performance metrics and analytics
 - 🔍 **Codebase Analysis**: Analyze code files for better context understanding
-- 💾 **Persistent Storage**: PostgreSQL for data persistence and Redis for caching
+- 💾 **Persistent Storage**: PostgreSQL for data persistence and Redis for caching with optimized performance
 - 🛠️ **MCP Tools**: Standard MCP tools for session registration, context updates, and handoff requests
-- 📊 **Context Summarization**: Automatic generation of handoff summaries
+- 📊 **Context Summarization**: Automatic generation of handoff summaries with intelligent insights
+- 🏥 **Health Monitoring**: Comprehensive health checks and system monitoring with Prometheus metrics
+- 📈 **Analytics & Insights**: Advanced analytics for session patterns, performance trends, and usage statistics
+- ⚡ **Performance Optimization**: Background job processing, connection pooling, and intelligent caching
+- 🔧 **Structured Logging**: Comprehensive logging with contextual information and error tracking
 
 ## Quick Start
 
@@ -51,23 +55,29 @@ A Model Context Protocol (MCP) server for seamless context transfer between AI a
 
 ```
 src/
-├── server.ts              # Main MCP server entry point
+├── server.ts                    # Main MCP server entry point
 ├── config/
-│   ├── index.ts           # Configuration management
-│   └── env.ts             # Environment variable handling
+│   ├── index.ts                 # Configuration management
+│   └── env.ts                   # Environment variable handling
 ├── database/
-│   ├── index.ts           # Database manager
-│   └── schema.ts          # Table definitions and types
+│   ├── index.ts                 # Database manager with connection pooling
+│   └── schema.ts                # Enhanced table definitions and types
 ├── mcp/
 │   ├── tools/
-│   │   ├── registerSession.ts    # Session registration handler
-│   │   ├── updateContext.ts      # Context update handler
-│   │   └── requestHandoff.ts     # Handoff request handler
+│   │   ├── registerSession.ts   # Session registration with lifecycle tracking
+│   │   ├── updateContext.ts     # Context updates with performance metrics
+│   │   ├── requestHandoff.ts    # Enhanced handoff request handler
+│   │   └── index.ts             # Tool exports and management
 │   └── resources/
-│       └── index.ts       # Resource definitions
+│       └── index.ts             # MCP resource definitions
 └── services/
-    ├── contextManager.ts   # Context management logic
-    └── codebaseAnalyzer.ts # Code analysis functionality
+    ├── contextManager.ts        # Context management with caching
+    ├── codebaseAnalyzer.ts      # Advanced code analysis functionality
+    ├── sessionManager.ts        # Session lifecycle and cleanup management
+    ├── monitoringService.ts     # Health monitoring and metrics collection
+    ├── analyticsService.ts      # Analytics and insights generation
+    ├── structuredLogger.ts      # Comprehensive structured logging
+    └── backgroundJobScheduler.ts # Background job processing and scheduling
 ```
 
 ## Available MCP Tools
@@ -126,11 +136,37 @@ Analyze code files for context:
 }
 ```
 
+### 5. Background Job Management
+Manage and monitor background jobs:
+```json
+{
+  "name": "schedule_job",
+  "arguments": {
+    "jobType": "cleanup|analytics|monitoring",
+    "schedule": "cron-expression",
+    "jobData": {}
+  }
+}
+```
+
+```json
+{
+  "name": "get_job_status",
+  "arguments": {
+    "jobId": "job-id"
+  }
+}
+```
+
 ## Available MCP Resources
 
-- `handoff://sessions` - List of active sessions
-- `handoff://context/{sessionKey}` - Complete context for a session
+- `handoff://sessions` - List of active sessions with lifecycle status
+- `handoff://context/{sessionKey}` - Complete context for a session with performance metrics
 - `handoff://summary/{sessionKey}` - Context summary for a session
+- `handoff://health` - System health status and component monitoring
+- `handoff://metrics` - Prometheus-compatible metrics export
+- `handoff://analytics/{type}` - Analytics insights and usage statistics
+- `handoff://jobs` - Background job status and management
 
 ## Environment Configuration
 
@@ -163,10 +199,14 @@ MCP_SERVER_VERSION=1.0.0
 
 The server uses PostgreSQL with the following main tables:
 
-- **sessions**: Track handoff sessions
-- **context_history**: Store conversation and context data
+- **sessions**: Track handoff sessions with enhanced monitoring fields
+- **context_history**: Store conversation and context data with performance metrics
 - **codebase_snapshots**: Store code analysis results
 - **handoff_requests**: Track handoff attempts
+- **session_lifecycle**: Log session events for monitoring and analytics
+- **system_metrics**: Store system performance and health data
+- **performance_logs**: Track operation performance and timing
+- **analytics_aggregations**: Store pre-computed analytics for efficient queries
 
 ## Development
 
@@ -193,7 +233,9 @@ npm run lint:fix
 
 ### Testing
 ```bash
-npm test
+npm test              # Run Jest test suite
+npm run test:watch    # Run tests in watch mode
+npm run test:coverage # Run tests with coverage report
 ```
 
 ## Docker Services
@@ -213,6 +255,37 @@ Start with pgAdmin:
 ```bash
 docker-compose --profile tools up -d
 ```
+
+## Monitoring and Analytics
+
+### Health Monitoring
+The server provides comprehensive health monitoring:
+- Database and Redis connection health checks
+- System resource monitoring (CPU, memory, disk)
+- Component health status tracking
+- Health check endpoint responding within 1 second under load
+
+### Metrics and Analytics
+- Prometheus-compatible metrics export
+- Session lifecycle tracking and analytics  
+- Performance metrics for all operations
+- Usage pattern analysis and trends
+- Anomaly detection for unusual session behavior
+- Background job monitoring and status
+
+### Session Lifecycle Management
+- Automatic session expiration and cleanup
+- Dormant session detection and archival
+- Configurable retention policies
+- Cache optimization for frequently accessed sessions
+- Referential integrity maintenance during lifecycle transitions
+
+### Performance Optimization
+- Connection pooling for PostgreSQL and Redis
+- Intelligent caching strategies
+- Background job processing for heavy operations
+- Performance logging and threshold monitoring
+- Query optimization and indexing for analytics
 
 ## Usage with MCP Clients
 
@@ -248,6 +321,19 @@ MIT License - see [LICENSE](LICENSE) file for details.
 4. Add tests if applicable
 5. Submit a pull request
 
+## Configuration
+
+The server supports extensive configuration through environment variables and configuration files. Key configuration areas include:
+
+- **Retention Policies**: Configure session cleanup and archival
+- **Monitoring Settings**: Adjust health check intervals and thresholds  
+- **Performance Tuning**: Database pool sizes, cache settings, job schedules
+- **Analytics Configuration**: Aggregation intervals and insight generation
+
 ## Support
 
-For issues and questions, please use the GitHub issue tracker.
+For issues and questions:
+- Check the [troubleshooting guide](./docs/troubleshooting.md) for common issues
+- Review system logs and health endpoints for diagnostic information
+- Use the GitHub issue tracker for bug reports and feature requests
+- Monitor the analytics dashboard for performance insights

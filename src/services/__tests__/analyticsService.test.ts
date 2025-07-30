@@ -259,7 +259,7 @@ describe('AnalyticsService', () => {
       
       // First bucket (10:00-11:00) should have 2 handoffs with 50% success rate
       const firstBucket = result.handoffTrends.find(trend => 
-        trend.timestamp.getHours() === 10
+        trend.timestamp.getUTCHours() === 10
       );
       expect(firstBucket).toBeDefined();
       expect(firstBucket?.count).toBe(2);
@@ -267,7 +267,7 @@ describe('AnalyticsService', () => {
 
       // Second bucket (11:00-12:00) should have 1 handoff with 100% success rate
       const secondBucket = result.handoffTrends.find(trend => 
-        trend.timestamp.getHours() === 11
+        trend.timestamp.getUTCHours() === 11
       );
       expect(secondBucket).toBeDefined();
       expect(secondBucket?.count).toBe(1);
