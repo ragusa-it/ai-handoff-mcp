@@ -1,7 +1,8 @@
 import { monitoredDb } from '../database/monitoredDatabase.js';
-import { monitoringService } from './monitoringService.js';
+import { monitoringService, SystemMetrics } from './monitoringService.js';
 import { structuredLogger } from './structuredLogger.js';
 import { PerformanceTimer } from '../mcp/utils/performance.js';
+import type { IConfigurationManager, AnalyticsConfig } from './configurationManager.js';
 
 // Analytics interfaces
 export interface SessionStatistics {
@@ -160,6 +161,68 @@ export interface AnalyticsQuery {
   includeAnomalies?: boolean;
 }
 
+// Anomaly detection interfaces
+export interface Anomaly {
+  id: string;
+  timestamp: Date;
+  type: 'session_pattern' | 'performance_degradation' | 'resource_spike' | 'handoff_failure' | 'context_growth';
+  severity: 'low' | 'medium' | 'high' | 'critical';
+  description: string;
+  affectedComponents: string[];
+  metrics: Record<string, number>;
+  confidence: number; // 0-1 scale
+  suggestedActions: string[];
+  relatedAnomalies?: string[];
+}
+
+export interface AnomalyDetectionConfig {
+  sensitivity: number; // 0-1 scale, higher = more sensitive
+  lookbackWindow: number; // hours
+  minimumDataPoints: number;
+  thresholds: {
+    sessionVolumeSpike: number; // multiplier of baseline
+    performanceDegradation: number; // percentage increase
+    resourceUsageSpike: number; // percentage increase
+    handoffFailureRate: number; // percentage
+    contextGrowthRate: number; // multiplier of baseline
+  };
+}
+
+// Recommendation engine interfaces
+export interface Recommendation {
+  id: string;
+  timestamp: Date;
+  type: 'performance' | 'resource' | 'configuration' | 'maintenance';
+  priority: 'low' | 'medium' | 'high' | 'critical';
+  title: string;
+  description: string;
+  impact: string;
+  effort: 'low' | 'medium' | 'high';
+  category: 'scaling' | 'optimization' | 'cleanup' | 'monitoring';
+  actionItems: string[];
+  expectedBenefit: string;
+  relatedMetrics: Record<string, number>;
+  validUntil?: Date;
+}
+
+export interface TrendAnalysis {
+  metric: string;
+  timeRange: { start: Date; end: Date };
+  trend: 'increasing' | 'decreasing' | 'stable' | 'volatile';
+  changeRate: number; // percentage change per time unit
+  confidence: number; // 0-1 scale
+  seasonality?: {
+    detected: boolean;
+    period?: number; // hours
+    amplitude?: number;
+  };
+  forecast?: Array<{
+    timestamp: Date;
+    predictedValue: number;
+    confidenceInterval: { lower: number; upper: number };
+  }>;
+}
+
 /**
  * AnalyticsService provides comprehensive analytics and insights
  * for session management, handoff patterns, and system performance
@@ -171,6 +234,44 @@ export class AnalyticsService {
   constructor() {
     // Initialize analytics service
     this.initializeAnalytics();
+  }
+
+  /**
+   * Set the configuration manager for dynamic configuration updates
+   */
+  setConfigurationManager(configManager: IConfigurationManager): void {
+    // Load current analytics configuration
+    const currentConfig = configManager.getAnalyticsConfig();
+    
+    // Listen for configuration changes
+    configManager.on('configChanged', (newConfig) => {
+      const newAnalyticsConfig = newConfig.analytics;
+      if (newAnalyticsConfig) {
+        this.onConfigurationChanged(newAnalyticsConfig);
+      }
+    });
+    
+    // Apply initial configuration
+    this.onConfigurationChanged(currentConfig);
+  }
+
+  /**
+   * Handle configuration changes
+   */
+  private onConfigurationChanged(newConfig: AnalyticsConfig): void {
+    structuredLogger.logSystemEvent({
+      timestamp: new Date(),
+      component: 'AnalyticsService',
+      operation: 'configurationChanged',
+      status: 'completed',
+      metadata: {
+        enableSessionAnalytics: newConfig.enableSessionAnalytics,
+        enablePerformanceAnalytics: newConfig.enablePerformanceAnalytics,
+        enableUsageAnalytics: newConfig.enableUsageAnalytics,
+        enableTrendAnalysis: newConfig.enableTrendAnalysis,
+        enablePredictiveAnalytics: newConfig.enablePredictiveAnalytics
+      }
+    });
   }
 
   /**
@@ -1079,7 +1180,7 @@ export class AnalyticsService {
 
       // Generate alerts and recommendations
       const alerts = this.generateResourceAlerts(historical);
-      const recommendations = this.generateResourceRecommendations(currentSystemMetrics, historical);
+      const recommendations = this.generateOldResourceRecommendations(currentSystemMetrics, historical);
 
       const utilization: ResourceUtilization = {
         current: {
@@ -1142,6 +1243,424 @@ export class AnalyticsService {
         component: 'AnalyticsService',
         operation: 'get_resource_utilization',
         additionalInfo: { timeRange: query.timeRange, durationMs: duration }
+      });
+
+      throw error;
+    }
+  }
+
+  /**
+   * Detect anomalies in system behavior and session patterns
+   */
+  async detectAnomalies(config?: Partial<AnomalyDetectionConfig>): Promise<Anomaly[]> {
+    const timer = new PerformanceTimer();
+    const cacheKey = `anomalies_${JSON.stringify(config)}`;
+
+    try {
+      // Check cache first
+      const cached = this.getFromCache<Anomaly[]>(cacheKey);
+      if (cached) {
+        return cached;
+      }
+
+      structuredLogger.logSystemEvent({
+        timestamp: new Date(),
+        component: 'AnalyticsService',
+        operation: 'detect_anomalies_start',
+        status: 'started',
+        metadata: { config }
+      });
+
+      const detectionConfig: AnomalyDetectionConfig = {
+        sensitivity: 0.7,
+        lookbackWindow: 24,
+        minimumDataPoints: 3,
+        thresholds: {
+          sessionVolumeSpike: 3.0,
+          performanceDegradation: 50,
+          resourceUsageSpike: 80,
+          handoffFailureRate: 20,
+          contextGrowthRate: 5.0
+        },
+        ...config
+      };
+
+      const now = new Date();
+      const lookbackStart = new Date(now.getTime() - detectionConfig.lookbackWindow * 60 * 60 * 1000);
+      const timeRange = { start: lookbackStart, end: now };
+
+      const anomalies: Anomaly[] = [];
+
+      // Detect session pattern anomalies
+      const sessionAnomalies = await this.detectSessionPatternAnomalies(timeRange, detectionConfig);
+      anomalies.push(...sessionAnomalies);
+      timer.checkpoint('session_anomalies');
+
+      // Detect performance anomalies
+      const performanceAnomalies = await this.detectPerformanceAnomalies(timeRange, detectionConfig);
+      anomalies.push(...performanceAnomalies);
+      timer.checkpoint('performance_anomalies');
+
+      // Detect resource usage anomalies
+      const resourceAnomalies = await this.detectResourceAnomalies(timeRange, detectionConfig);
+      anomalies.push(...resourceAnomalies);
+      timer.checkpoint('resource_anomalies');
+
+      // Detect handoff failure anomalies
+      const handoffAnomalies = await this.detectHandoffAnomalies(timeRange, detectionConfig);
+      anomalies.push(...handoffAnomalies);
+      timer.checkpoint('handoff_anomalies');
+
+      // Detect context growth anomalies
+      const contextAnomalies = await this.detectContextGrowthAnomalies(timeRange, detectionConfig);
+      anomalies.push(...contextAnomalies);
+      timer.checkpoint('context_anomalies');
+
+      // Sort by severity and timestamp
+      anomalies.sort((a, b) => {
+        const severityOrder = { critical: 4, high: 3, medium: 2, low: 1 };
+        const severityDiff = severityOrder[b.severity] - severityOrder[a.severity];
+        if (severityDiff !== 0) return severityDiff;
+        return b.timestamp.getTime() - a.timestamp.getTime();
+      });
+
+      // Cache the results
+      this.setCache(cacheKey, anomalies);
+
+      const duration = timer.getElapsed();
+
+      monitoringService.recordPerformanceMetrics('detect_anomalies', {
+        operation: 'detect_anomalies',
+        duration,
+        success: true,
+        metadata: {
+          anomaliesFound: anomalies.length,
+          lookbackHours: detectionConfig.lookbackWindow,
+          performanceBreakdown: timer.getAllCheckpointDurations()
+        }
+      });
+
+      structuredLogger.logSystemEvent({
+        timestamp: new Date(),
+        component: 'AnalyticsService',
+        operation: 'detect_anomalies_complete',
+        status: 'completed',
+        metadata: {
+          durationMs: duration,
+          anomaliesFound: anomalies.length,
+          severityBreakdown: this.getAnomalySeverityBreakdown(anomalies),
+          performanceBreakdown: timer.getAllCheckpointDurations()
+        }
+      });
+
+      return anomalies;
+
+    } catch (error) {
+      const duration = timer.getElapsed();
+
+      monitoringService.recordPerformanceMetrics('detect_anomalies', {
+        operation: 'detect_anomalies',
+        duration,
+        success: false,
+        metadata: { error: (error as Error).message }
+      });
+
+      structuredLogger.logError(error as Error, {
+        timestamp: new Date(),
+        errorType: 'ServiceError',
+        component: 'AnalyticsService',
+        operation: 'detect_anomalies',
+        additionalInfo: { config, durationMs: duration }
+      });
+
+      throw error;
+    }
+  }
+
+  /**
+   * Generate performance optimization recommendations
+   */
+  async generateRecommendations(): Promise<Recommendation[]> {
+    const timer = new PerformanceTimer();
+    const cacheKey = 'recommendations';
+
+    try {
+      // Check cache first
+      const cached = this.getFromCache<Recommendation[]>(cacheKey);
+      if (cached) {
+        return cached;
+      }
+
+      structuredLogger.logSystemEvent({
+        timestamp: new Date(),
+        component: 'AnalyticsService',
+        operation: 'generate_recommendations_start',
+        status: 'started'
+      });
+
+      const now = new Date();
+      const last24Hours = { start: new Date(now.getTime() - 24 * 60 * 60 * 1000), end: now };
+      const last7Days = { start: new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000), end: now };
+
+      const recommendations: Recommendation[] = [];
+
+      // Get current system state
+      const currentMetrics = await monitoringService.getSystemMetrics();
+      const performanceTrends = await this.getPerformanceTrends({ timeRange: last24Hours });
+      const resourceUtilization = await this.getResourceUtilization({ timeRange: last24Hours });
+      const sessionStats = await this.getSessionStatistics({ timeRange: last7Days });
+      const handoffAnalytics = await this.getHandoffAnalytics({ timeRange: last7Days });
+
+      timer.checkpoint('data_collection');
+
+      // Generate performance recommendations
+      const performanceRecs = this.generatePerformanceRecommendations(performanceTrends, currentMetrics);
+      recommendations.push(...performanceRecs);
+
+      // Generate resource recommendations
+      const resourceRecs = this.generateResourceRecommendations(resourceUtilization, currentMetrics);
+      recommendations.push(...resourceRecs);
+
+      // Generate session management recommendations
+      const sessionRecs = this.generateSessionRecommendations(sessionStats, currentMetrics);
+      recommendations.push(...sessionRecs);
+
+      // Generate handoff optimization recommendations
+      const handoffRecs = this.generateHandoffRecommendations(handoffAnalytics);
+      recommendations.push(...handoffRecs);
+
+      // Generate configuration recommendations
+      const configRecs = this.generateConfigurationRecommendations(currentMetrics, performanceTrends);
+      recommendations.push(...configRecs);
+
+      timer.checkpoint('recommendation_generation');
+
+      // Sort by priority and impact
+      recommendations.sort((a, b) => {
+        const priorityOrder = { critical: 4, high: 3, medium: 2, low: 1 };
+        const priorityDiff = priorityOrder[b.priority] - priorityOrder[a.priority];
+        if (priorityDiff !== 0) return priorityDiff;
+        return b.timestamp.getTime() - a.timestamp.getTime();
+      });
+
+      // Cache the results
+      this.setCache(cacheKey, recommendations);
+
+      const duration = timer.getElapsed();
+
+      monitoringService.recordPerformanceMetrics('generate_recommendations', {
+        operation: 'generate_recommendations',
+        duration,
+        success: true,
+        metadata: {
+          recommendationsGenerated: recommendations.length,
+          performanceBreakdown: timer.getAllCheckpointDurations()
+        }
+      });
+
+      structuredLogger.logSystemEvent({
+        timestamp: new Date(),
+        component: 'AnalyticsService',
+        operation: 'generate_recommendations_complete',
+        status: 'completed',
+        metadata: {
+          durationMs: duration,
+          recommendationsGenerated: recommendations.length,
+          priorityBreakdown: this.getRecommendationPriorityBreakdown(recommendations),
+          performanceBreakdown: timer.getAllCheckpointDurations()
+        }
+      });
+
+      return recommendations;
+
+    } catch (error) {
+      const duration = timer.getElapsed();
+
+      monitoringService.recordPerformanceMetrics('generate_recommendations', {
+        operation: 'generate_recommendations',
+        duration,
+        success: false,
+        metadata: { error: (error as Error).message }
+      });
+
+      structuredLogger.logError(error as Error, {
+        timestamp: new Date(),
+        errorType: 'ServiceError',
+        component: 'AnalyticsService',
+        operation: 'generate_recommendations',
+        additionalInfo: { durationMs: duration }
+      });
+
+      throw error;
+    }
+  }
+
+  /**
+   * Analyze trends in system metrics and usage patterns
+   */
+  async analyzeTrends(metrics: string[], timeRange: { start: Date; end: Date }): Promise<TrendAnalysis[]> {
+    const timer = new PerformanceTimer();
+    const cacheKey = `trends_${metrics.join(',')}_${JSON.stringify(timeRange)}`;
+
+    try {
+      // Check cache first
+      const cached = this.getFromCache<TrendAnalysis[]>(cacheKey);
+      if (cached) {
+        return cached;
+      }
+
+      structuredLogger.logSystemEvent({
+        timestamp: new Date(),
+        component: 'AnalyticsService',
+        operation: 'analyze_trends_start',
+        status: 'started',
+        metadata: { metrics, timeRange }
+      });
+
+      const trends: TrendAnalysis[] = [];
+
+      for (const metric of metrics) {
+        const trendAnalysis = await this.analyzeSingleMetricTrend(metric, timeRange);
+        if (trendAnalysis) {
+          trends.push(trendAnalysis);
+        }
+      }
+
+      timer.checkpoint('trend_analysis');
+
+      // Cache the results
+      this.setCache(cacheKey, trends);
+
+      const duration = timer.getElapsed();
+
+      monitoringService.recordPerformanceMetrics('analyze_trends', {
+        operation: 'analyze_trends',
+        duration,
+        success: true,
+        metadata: {
+          metricsAnalyzed: metrics.length,
+          trendsFound: trends.length
+        }
+      });
+
+      structuredLogger.logSystemEvent({
+        timestamp: new Date(),
+        component: 'AnalyticsService',
+        operation: 'analyze_trends_complete',
+        status: 'completed',
+        metadata: {
+          durationMs: duration,
+          metricsAnalyzed: metrics.length,
+          trendsFound: trends.length
+        }
+      });
+
+      return trends;
+
+    } catch (error) {
+      const duration = timer.getElapsed();
+
+      monitoringService.recordPerformanceMetrics('analyze_trends', {
+        operation: 'analyze_trends',
+        duration,
+        success: false,
+        metadata: { error: (error as Error).message }
+      });
+
+      structuredLogger.logError(error as Error, {
+        timestamp: new Date(),
+        errorType: 'ServiceError',
+        component: 'AnalyticsService',
+        operation: 'analyze_trends',
+        additionalInfo: { metrics, timeRange, durationMs: duration }
+      });
+
+      throw error;
+    }
+  }
+
+  /**
+   * Trigger alerts for detected anomalies and performance issues
+   */
+  async triggerAnomalyAlerts(anomalies: Anomaly[]): Promise<void> {
+    const timer = new PerformanceTimer();
+
+    try {
+      structuredLogger.logSystemEvent({
+        timestamp: new Date(),
+        component: 'AnalyticsService',
+        operation: 'trigger_anomaly_alerts_start',
+        status: 'started',
+        metadata: { anomaliesCount: anomalies.length }
+      });
+
+      for (const anomaly of anomalies) {
+        // Only alert on medium severity and above
+        if (anomaly.severity === 'low') continue;
+
+        // Log the anomaly as an alert
+        structuredLogger.logSystemEvent({
+          timestamp: new Date(),
+          component: 'AnalyticsService',
+          operation: 'anomaly_alert',
+          status: 'completed',
+          metadata: {
+            anomalyId: anomaly.id,
+            type: anomaly.type,
+            severity: anomaly.severity,
+            description: anomaly.description,
+            affectedComponents: anomaly.affectedComponents,
+            confidence: anomaly.confidence,
+            suggestedActions: anomaly.suggestedActions
+          }
+        });
+
+        // Record as a system metric for external monitoring
+        await this.recordAnomalyMetric(anomaly);
+
+        // For critical anomalies, also trigger immediate notifications
+        if (anomaly.severity === 'critical') {
+          await this.triggerCriticalAnomalyNotification(anomaly);
+        }
+      }
+
+      const duration = timer.getElapsed();
+
+      monitoringService.recordPerformanceMetrics('trigger_anomaly_alerts', {
+        operation: 'trigger_anomaly_alerts',
+        duration,
+        success: true,
+        metadata: { anomaliesProcessed: anomalies.length }
+      });
+
+      structuredLogger.logSystemEvent({
+        timestamp: new Date(),
+        component: 'AnalyticsService',
+        operation: 'trigger_anomaly_alerts_complete',
+        status: 'completed',
+        metadata: {
+          durationMs: duration,
+          anomaliesProcessed: anomalies.length,
+          alertsTriggered: anomalies.filter(a => a.severity !== 'low').length
+        }
+      });
+
+    } catch (error) {
+      const duration = timer.getElapsed();
+
+      monitoringService.recordPerformanceMetrics('trigger_anomaly_alerts', {
+        operation: 'trigger_anomaly_alerts',
+        duration,
+        success: false,
+        metadata: { error: (error as Error).message }
+      });
+
+      structuredLogger.logError(error as Error, {
+        timestamp: new Date(),
+        errorType: 'ServiceError',
+        component: 'AnalyticsService',
+        operation: 'trigger_anomaly_alerts',
+        additionalInfo: { anomaliesCount: anomalies.length, durationMs: duration }
       });
 
       throw error;
@@ -1380,38 +1899,7 @@ export class AnalyticsService {
     return alerts;
   }
 
-  private generateResourceRecommendations(current: any, historical: Array<any>): Array<{ type: 'scale_up' | 'optimize' | 'cleanup'; description: string; priority: 'low' | 'medium' | 'high' }> {
-    const recommendations: Array<{ type: 'scale_up' | 'optimize' | 'cleanup'; description: string; priority: 'low' | 'medium' | 'high' }> = [];
 
-    const memoryUsage = current.memory?.percentage || current.memoryUsage || 0;
-    if (memoryUsage > 85) {
-      recommendations.push({
-        type: 'scale_up',
-        description: 'Memory usage is consistently high. Consider increasing available memory or scaling horizontally.',
-        priority: 'high'
-      });
-    }
-
-    const activeSessions = current.sessions?.active || current.activeSessions || 0;
-    if (activeSessions > 1000) {
-      recommendations.push({
-        type: 'optimize',
-        description: 'High number of active sessions. Consider implementing session cleanup or dormancy detection.',
-        priority: 'medium'
-      });
-    }
-
-    const avgMemoryUsage = historical.reduce((sum, h) => sum + h.memoryUsage, 0) / historical.length;
-    if (avgMemoryUsage > 70) {
-      recommendations.push({
-        type: 'cleanup',
-        description: 'Memory usage trending upward. Review for memory leaks and implement garbage collection optimization.',
-        priority: 'medium'
-      });
-    }
-
-    return recommendations;
-  }
 
   private async calculateHourlySessionStats(timeBucket: Date): Promise<Record<string, any>> {
     const bucketEnd = new Date(timeBucket.getTime() + 60 * 60 * 1000);
@@ -1665,6 +2153,1123 @@ export class AnalyticsService {
       data,
       expires: Date.now() + this.cacheTimeout
     });
+  }
+
+  // Anomaly detection helper methods
+
+  private async detectSessionPatternAnomalies(timeRange: { start: Date; end: Date }, config: AnomalyDetectionConfig): Promise<Anomaly[]> {
+    const anomalies: Anomaly[] = [];
+
+    // Get session creation patterns
+    const sessionQuery = `
+      SELECT 
+        DATE_TRUNC('hour', created_at) as hour,
+        COUNT(*) as session_count,
+        status,
+        agent_from
+      FROM sessions
+      WHERE created_at BETWEEN $1 AND $2
+      GROUP BY DATE_TRUNC('hour', created_at), status, agent_from
+      ORDER BY hour DESC
+    `;
+
+    const sessionData = await monitoredDb.query(sessionQuery, [timeRange.start, timeRange.end]);
+
+    // Calculate baseline session volume
+    const hourlyVolumes = new Map<string, number>();
+    for (const row of sessionData.rows) {
+      const hour = row.hour.toISOString();
+      hourlyVolumes.set(hour, (hourlyVolumes.get(hour) || 0) + parseInt(row.session_count));
+    }
+
+    const volumes = Array.from(hourlyVolumes.values());
+    if (volumes.length < config.minimumDataPoints) return anomalies;
+
+    const avgVolume = volumes.reduce((a, b) => a + b, 0) / volumes.length;
+    const stdDev = Math.sqrt(volumes.reduce((sum, vol) => sum + Math.pow(vol - avgVolume, 2), 0) / volumes.length);
+
+    // Detect volume spikes
+    for (const [hour, volume] of hourlyVolumes) {
+      const threshold = avgVolume + (stdDev * config.sensitivity * 2);
+      if (volume > threshold && volume > avgVolume * config.thresholds.sessionVolumeSpike) {
+        anomalies.push({
+          id: `session_volume_spike_${hour}`,
+          timestamp: new Date(hour),
+          type: 'session_pattern',
+          severity: volume > avgVolume * 5 ? 'critical' : volume > avgVolume * 3 ? 'high' : 'medium',
+          description: `Unusual session volume spike: ${volume} sessions (${Math.round((volume / avgVolume - 1) * 100)}% above average)`,
+          affectedComponents: ['session_manager', 'database'],
+          metrics: { volume, baseline: avgVolume, threshold },
+          confidence: Math.min(0.95, (volume - threshold) / threshold),
+          suggestedActions: [
+            'Check for automated session creation',
+            'Monitor system resources',
+            'Review session cleanup policies',
+            'Investigate potential DDoS or abuse'
+          ]
+        });
+      }
+    }
+
+    // Detect unusual failure patterns
+    const failureRates = new Map<string, { total: number; failed: number }>();
+    for (const row of sessionData.rows) {
+      const hour = row.hour.toISOString();
+      const count = parseInt(row.session_count);
+      const isFailed = row.status === 'failed' || row.status === 'error';
+
+      if (!failureRates.has(hour)) {
+        failureRates.set(hour, { total: 0, failed: 0 });
+      }
+
+      const stats = failureRates.get(hour)!;
+      stats.total += count;
+      if (isFailed) stats.failed += count;
+    }
+
+    for (const [hour, stats] of failureRates) {
+      if (stats.total < 5) continue; // Skip low-volume hours
+      
+      const failureRate = (stats.failed / stats.total) * 100;
+      if (failureRate > 25) { // More than 25% failure rate
+        anomalies.push({
+          id: `session_failure_spike_${hour}`,
+          timestamp: new Date(hour),
+          type: 'session_pattern',
+          severity: failureRate > 50 ? 'critical' : failureRate > 35 ? 'high' : 'medium',
+          description: `High session failure rate: ${failureRate.toFixed(1)}% (${stats.failed}/${stats.total} sessions)`,
+          affectedComponents: ['session_manager', 'database', 'mcp_tools'],
+          metrics: { failureRate, failedSessions: stats.failed, totalSessions: stats.total },
+          confidence: Math.min(0.9, failureRate / 50),
+          suggestedActions: [
+            'Check system logs for error patterns',
+            'Review database connectivity',
+            'Monitor resource availability',
+            'Investigate authentication issues'
+          ]
+        });
+      }
+    }
+
+    return anomalies;
+  }
+
+  private async detectPerformanceAnomalies(timeRange: { start: Date; end: Date }, config: AnomalyDetectionConfig): Promise<Anomaly[]> {
+    const anomalies: Anomaly[] = [];
+
+    // Get performance data
+    const performanceQuery = `
+      SELECT 
+        operation,
+        DATE_TRUNC('hour', created_at) as hour,
+        AVG(duration_ms) as avg_duration,
+        COUNT(*) as operation_count,
+        COUNT(*) FILTER (WHERE success = false) as failed_count
+      FROM performance_logs
+      WHERE created_at BETWEEN $1 AND $2
+      GROUP BY operation, DATE_TRUNC('hour', created_at)
+      HAVING COUNT(*) >= 3
+      ORDER BY hour DESC, operation
+    `;
+
+    const performanceData = await monitoredDb.query(performanceQuery, [timeRange.start, timeRange.end]);
+
+    // Group by operation to calculate baselines
+    const operationBaselines = new Map<string, { durations: number[]; avgDuration: number }>();
+
+    for (const row of performanceData.rows) {
+      const operation = row.operation;
+      const duration = parseFloat(row.avg_duration);
+
+      if (!operationBaselines.has(operation)) {
+        operationBaselines.set(operation, { durations: [], avgDuration: 0 });
+      }
+
+      operationBaselines.get(operation)!.durations.push(duration);
+    }
+
+    // Calculate baselines and detect anomalies
+    for (const [operation, data] of operationBaselines) {
+      if (data.durations.length < config.minimumDataPoints) continue;
+
+      data.avgDuration = data.durations.reduce((a, b) => a + b, 0) / data.durations.length;
+      // Calculate standard deviation for future use in anomaly detection
+      // const stdDev = Math.sqrt(data.durations.reduce((sum, dur) => sum + Math.pow(dur - data.avgDuration, 2), 0) / data.durations.length);
+
+      // Find recent performance degradations (data is ordered DESC, so first items are most recent)
+      const recentDurations = data.durations.slice(0, Math.min(2, Math.floor(data.durations.length / 2)));
+      const recentAvg = recentDurations.reduce((a, b) => a + b, 0) / recentDurations.length;
+
+      const degradationThreshold = data.avgDuration * (1 + config.thresholds.performanceDegradation / 100);
+      
+      if (recentAvg > degradationThreshold) {
+        const degradationPercent = ((recentAvg - data.avgDuration) / data.avgDuration) * 100;
+        
+        anomalies.push({
+          id: `performance_degradation_${operation}_${Date.now()}`,
+          timestamp: new Date(),
+          type: 'performance_degradation',
+          severity: degradationPercent > 100 ? 'critical' : degradationPercent > 75 ? 'high' : 'medium',
+          description: `Performance degradation in ${operation}: ${recentAvg.toFixed(0)}ms average (${degradationPercent.toFixed(1)}% slower than baseline)`,
+          affectedComponents: [operation, 'database', 'system'],
+          metrics: { 
+            currentAvg: recentAvg, 
+            baseline: data.avgDuration, 
+            degradationPercent,
+            threshold: degradationThreshold 
+          },
+          confidence: Math.min(0.9, degradationPercent / 100),
+          suggestedActions: [
+            'Check system resource usage',
+            'Review database query performance',
+            'Monitor for memory leaks',
+            'Consider scaling resources',
+            'Review recent code changes'
+          ]
+        });
+      }
+    }
+
+    return anomalies;
+  }
+
+  private async detectResourceAnomalies(timeRange: { start: Date; end: Date }, config: AnomalyDetectionConfig): Promise<Anomaly[]> {
+    const anomalies: Anomaly[] = [];
+
+    // Get resource usage data
+    const resourceQuery = `
+      SELECT 
+        metric_name,
+        DATE_TRUNC('hour', recorded_at) as hour,
+        AVG(metric_value) as avg_value,
+        MAX(metric_value) as max_value
+      FROM system_metrics
+      WHERE recorded_at BETWEEN $1 AND $2
+      AND metric_name IN ('memory_usage_percentage', 'cpu_usage_percentage', 'active_connections', 'active_sessions')
+      GROUP BY metric_name, DATE_TRUNC('hour', recorded_at)
+      ORDER BY hour DESC
+    `;
+
+    const resourceData = await monitoredDb.query(resourceQuery, [timeRange.start, timeRange.end]);
+
+    // Group by metric type
+    const metricData = new Map<string, Array<{ hour: Date; avg: number; max: number }>>();
+
+    for (const row of resourceData.rows) {
+      const metric = row.metric_name;
+      if (!metricData.has(metric)) {
+        metricData.set(metric, []);
+      }
+
+      metricData.get(metric)!.push({
+        hour: new Date(row.hour),
+        avg: parseFloat(row.avg_value),
+        max: parseFloat(row.max_value)
+      });
+    }
+
+    // Detect resource spikes
+    for (const [metric, data] of metricData) {
+      if (data.length < config.minimumDataPoints) continue;
+
+      const avgValues = data.map(d => d.avg);
+      const baseline = avgValues.reduce((a, b) => a + b, 0) / avgValues.length;
+
+      for (const point of data) {
+        let threshold: number;
+        let criticalThreshold: number;
+
+        if (metric.includes('percentage')) {
+          threshold = config.thresholds.resourceUsageSpike;
+          criticalThreshold = 95;
+        } else if (metric === 'active_connections') {
+          threshold = Math.max(100, baseline * 2);
+          criticalThreshold = Math.max(200, baseline * 3);
+        } else {
+          threshold = baseline * 2;
+          criticalThreshold = baseline * 3;
+        }
+
+        if (point.max > threshold) {
+          const severity = point.max > criticalThreshold ? 'critical' : 
+                          point.max > threshold * 1.5 ? 'high' : 'medium';
+
+          anomalies.push({
+            id: `resource_spike_${metric}_${point.hour.getTime()}`,
+            timestamp: point.hour,
+            type: 'resource_spike',
+            severity,
+            description: `${metric.replace('_', ' ')} spike: ${point.max.toFixed(1)}${metric.includes('percentage') ? '%' : ''} (threshold: ${threshold.toFixed(1)})`,
+            affectedComponents: ['system', 'database', 'session_manager'],
+            metrics: { 
+              currentValue: point.max, 
+              avgValue: point.avg, 
+              baseline, 
+              threshold 
+            },
+            confidence: Math.min(0.95, (point.max - threshold) / threshold),
+            suggestedActions: [
+              'Monitor system resources',
+              'Check for resource leaks',
+              'Consider scaling resources',
+              'Review active processes',
+              'Implement resource limits'
+            ]
+          });
+        }
+      }
+    }
+
+    return anomalies;
+  }
+
+  private async detectHandoffAnomalies(timeRange: { start: Date; end: Date }, config: AnomalyDetectionConfig): Promise<Anomaly[]> {
+    const anomalies: Anomaly[] = [];
+
+    // Get handoff data
+    const handoffQuery = `
+      SELECT 
+        DATE_TRUNC('hour', created_at) as hour,
+        COUNT(*) as total_handoffs,
+        COUNT(*) FILTER (WHERE success = false) as failed_handoffs,
+        AVG(duration_ms) as avg_duration,
+        metadata->>'agent_from' as agent_from,
+        metadata->>'agent_to' as agent_to
+      FROM performance_logs
+      WHERE operation = 'handoff'
+      AND created_at BETWEEN $1 AND $2
+      GROUP BY DATE_TRUNC('hour', created_at), metadata->>'agent_from', metadata->>'agent_to'
+      HAVING COUNT(*) >= 3
+      ORDER BY hour DESC
+    `;
+
+    const handoffData = await monitoredDb.query(handoffQuery, [timeRange.start, timeRange.end]);
+
+    // Analyze failure rates by hour
+    const hourlyStats = new Map<string, { total: number; failed: number; avgDuration: number }>();
+
+    for (const row of handoffData.rows) {
+      const hour = row.hour.toISOString();
+      const total = parseInt(row.total_handoffs);
+      const failed = parseInt(row.failed_handoffs);
+      const duration = parseFloat(row.avg_duration);
+
+      if (!hourlyStats.has(hour)) {
+        hourlyStats.set(hour, { total: 0, failed: 0, avgDuration: 0 });
+      }
+
+      const stats = hourlyStats.get(hour)!;
+      stats.total += total;
+      stats.failed += failed;
+      stats.avgDuration = (stats.avgDuration * (stats.total - total) + duration * total) / stats.total;
+    }
+
+    // Detect handoff failure spikes
+    for (const [hour, stats] of hourlyStats) {
+      if (stats.total < 5) continue;
+
+      const failureRate = (stats.failed / stats.total) * 100;
+      
+      if (failureRate > config.thresholds.handoffFailureRate) {
+        anomalies.push({
+          id: `handoff_failure_spike_${hour}`,
+          timestamp: new Date(hour),
+          type: 'handoff_failure',
+          severity: failureRate > 50 ? 'critical' : failureRate > 35 ? 'high' : 'medium',
+          description: `High handoff failure rate: ${failureRate.toFixed(1)}% (${stats.failed}/${stats.total} handoffs)`,
+          affectedComponents: ['handoff_system', 'mcp_tools', 'session_manager'],
+          metrics: { 
+            failureRate, 
+            failedHandoffs: stats.failed, 
+            totalHandoffs: stats.total,
+            avgDuration: stats.avgDuration
+          },
+          confidence: Math.min(0.9, failureRate / 50),
+          suggestedActions: [
+            'Check agent connectivity',
+            'Review handoff timeout settings',
+            'Monitor network latency',
+            'Investigate authentication issues',
+            'Review agent compatibility'
+          ]
+        });
+      }
+    }
+
+    return anomalies;
+  }
+
+  private async detectContextGrowthAnomalies(timeRange: { start: Date; end: Date }, config: AnomalyDetectionConfig): Promise<Anomaly[]> {
+    const anomalies: Anomaly[] = [];
+
+    // Get context growth data
+    const contextQuery = `
+      SELECT 
+        DATE_TRUNC('hour', created_at) as hour,
+        COUNT(*) as entry_count,
+        AVG(content_size_bytes) as avg_size,
+        MAX(content_size_bytes) as max_size,
+        SUM(content_size_bytes) as total_size
+      FROM context_history
+      WHERE created_at BETWEEN $1 AND $2
+      GROUP BY DATE_TRUNC('hour', created_at)
+      ORDER BY hour DESC
+    `;
+
+    const contextData = await monitoredDb.query(contextQuery, [timeRange.start, timeRange.end]);
+
+    if (contextData.rows.length < config.minimumDataPoints) return anomalies;
+
+    // Calculate baselines
+    const entryCounts = contextData.rows.map(row => parseInt(row.entry_count));
+    // Calculate baseline metrics for future use
+    // const avgSizes = contextData.rows.map(row => parseFloat(row.avg_size));
+    // const totalSizes = contextData.rows.map(row => parseInt(row.total_size));
+
+    const baselineEntryCount = entryCounts.reduce((a, b) => a + b, 0) / entryCounts.length;
+    // Calculate baselines for future use
+    // const baselineAvgSize = avgSizes.reduce((a, b) => a + b, 0) / avgSizes.length;
+    // const baselineTotalSize = totalSizes.reduce((a, b) => a + b, 0) / totalSizes.length;
+
+    // Detect anomalies
+    for (const row of contextData.rows) {
+      const hour = new Date(row.hour);
+      const entryCount = parseInt(row.entry_count);
+      const avgSize = parseFloat(row.avg_size);
+      const maxSize = parseInt(row.max_size);
+      const totalSize = parseInt(row.total_size);
+
+      // Detect volume growth anomalies
+      if (entryCount > baselineEntryCount * config.thresholds.contextGrowthRate) {
+        const growthRate = ((entryCount - baselineEntryCount) / baselineEntryCount) * 100;
+        
+        anomalies.push({
+          id: `context_volume_growth_${hour.getTime()}`,
+          timestamp: hour,
+          type: 'context_growth',
+          severity: entryCount > baselineEntryCount * 10 ? 'critical' : 
+                   entryCount > baselineEntryCount * 7 ? 'high' : 'medium',
+          description: `Unusual context volume growth: ${entryCount} entries (${growthRate.toFixed(1)}% above baseline)`,
+          affectedComponents: ['context_manager', 'database', 'memory'],
+          metrics: { 
+            entryCount, 
+            baseline: baselineEntryCount, 
+            growthRate,
+            avgSize,
+            totalSize
+          },
+          confidence: Math.min(0.9, growthRate / 500),
+          suggestedActions: [
+            'Review context cleanup policies',
+            'Monitor memory usage',
+            'Check for context leaks',
+            'Implement context size limits',
+            'Review session lifecycle management'
+          ]
+        });
+      }
+
+      // Detect size anomalies
+      if (maxSize > 5242880) { // 5MB threshold
+        anomalies.push({
+          id: `context_size_spike_${hour.getTime()}`,
+          timestamp: hour,
+          type: 'context_growth',
+          severity: maxSize > 10485760 ? 'critical' : 'high', // 10MB critical threshold
+          description: `Large context entry detected: ${Math.round(maxSize / 1024 / 1024)}MB (max size in hour)`,
+          affectedComponents: ['context_manager', 'database', 'memory'],
+          metrics: { 
+            maxSize, 
+            avgSize, 
+            entryCount,
+            sizeThreshold: 5242880
+          },
+          confidence: 0.95,
+          suggestedActions: [
+            'Implement content size validation',
+            'Review large content sources',
+            'Add content compression',
+            'Set maximum content limits',
+            'Monitor content types'
+          ]
+        });
+      }
+    }
+
+    return anomalies;
+  }
+
+  // Recommendation generation helper methods
+
+  private generatePerformanceRecommendations(trends: PerformanceTrends, _currentMetrics: SystemMetrics): Recommendation[] {
+    const recommendations: Recommendation[] = [];
+    const now = new Date();
+
+    // Analyze slow operations
+    if (trends.slowOperations.length > 0) {
+      const slowOpsCount = trends.slowOperations.length;
+      const avgSlowDuration = trends.slowOperations.reduce((sum, op) => sum + op.duration, 0) / slowOpsCount;
+
+      recommendations.push({
+        id: `perf_slow_operations_${now.getTime()}`,
+        timestamp: now,
+        type: 'performance',
+        priority: slowOpsCount > 20 ? 'high' : 'medium',
+        title: 'Optimize Slow Operations',
+        description: `${slowOpsCount} operations are running slower than 2 seconds, with an average duration of ${avgSlowDuration.toFixed(0)}ms`,
+        impact: `Reducing slow operations could improve overall system responsiveness by 20-40%`,
+        effort: 'medium',
+        category: 'optimization',
+        actionItems: [
+          'Profile slow database queries and add indexes',
+          'Implement query result caching',
+          'Optimize data processing algorithms',
+          'Consider async processing for heavy operations',
+          'Add connection pooling optimization'
+        ],
+        expectedBenefit: 'Improved response times and better user experience',
+        relatedMetrics: { 
+          slowOperationsCount: slowOpsCount, 
+          avgSlowDuration,
+          p95Duration: Math.max(...Object.values(trends.operationMetrics).map(m => m.p95Duration))
+        }
+      });
+    }
+
+    // Analyze degrading operations
+    const degradingOps = Object.entries(trends.operationMetrics)
+      .filter(([_, metrics]) => metrics.trend === 'degrading')
+      .length;
+
+    if (degradingOps > 0) {
+      recommendations.push({
+        id: `perf_degrading_trends_${now.getTime()}`,
+        timestamp: now,
+        type: 'performance',
+        priority: degradingOps > 5 ? 'high' : 'medium',
+        title: 'Address Performance Degradation Trends',
+        description: `${degradingOps} operations show degrading performance trends`,
+        impact: 'Preventing further degradation could maintain system stability',
+        effort: 'medium',
+        category: 'monitoring',
+        actionItems: [
+          'Set up automated performance monitoring',
+          'Implement performance regression testing',
+          'Review recent code changes for performance impact',
+          'Add performance budgets to CI/CD pipeline',
+          'Schedule regular performance audits'
+        ],
+        expectedBenefit: 'Proactive performance issue prevention',
+        relatedMetrics: { degradingOperations: degradingOps }
+      });
+    }
+
+    return recommendations;
+  }
+
+  private generateOldResourceRecommendations(current: any, historical: Array<any>): Array<{ type: 'scale_up' | 'optimize' | 'cleanup'; description: string; priority: 'low' | 'medium' | 'high' }> {
+    const recommendations: Array<{ type: 'scale_up' | 'optimize' | 'cleanup'; description: string; priority: 'low' | 'medium' | 'high' }> = [];
+
+    const memoryUsage = current.memory?.percentage || current.memoryUsage || 0;
+    if (memoryUsage > 85) {
+      recommendations.push({
+        type: 'scale_up',
+        description: 'Memory usage is consistently high. Consider increasing available memory or scaling horizontally.',
+        priority: 'high'
+      });
+    }
+
+    const activeSessions = current.sessions?.active || current.activeSessions || 0;
+    if (activeSessions > 1000) {
+      recommendations.push({
+        type: 'optimize',
+        description: 'High number of active sessions. Consider implementing session cleanup or dormancy detection.',
+        priority: 'medium'
+      });
+    }
+
+    const avgMemoryUsage = historical.reduce((sum, h) => sum + h.memoryUsage, 0) / historical.length;
+    if (avgMemoryUsage > 70) {
+      recommendations.push({
+        type: 'cleanup',
+        description: 'Memory usage trending upward. Review for memory leaks and implement garbage collection optimization.',
+        priority: 'medium'
+      });
+    }
+
+    return recommendations;
+  }
+
+  private generateResourceRecommendations(_utilization: ResourceUtilization, currentMetrics: SystemMetrics): Recommendation[] {
+    const recommendations: Recommendation[] = [];
+    const now = new Date();
+
+    // Memory usage recommendations
+    if (currentMetrics.memory.percentage > 80) {
+      recommendations.push({
+        id: `resource_memory_${now.getTime()}`,
+        timestamp: now,
+        type: 'resource',
+        priority: currentMetrics.memory.percentage > 90 ? 'critical' : 'high',
+        title: 'High Memory Usage Detected',
+        description: `Memory usage is at ${currentMetrics.memory.percentage.toFixed(1)}%, approaching critical levels`,
+        impact: 'High memory usage can lead to system instability and performance degradation',
+        effort: 'medium',
+        category: 'scaling',
+        actionItems: [
+          'Increase available memory or scale horizontally',
+          'Implement memory usage monitoring and alerts',
+          'Review and optimize memory-intensive operations',
+          'Add garbage collection tuning',
+          'Implement memory leak detection'
+        ],
+        expectedBenefit: 'Improved system stability and performance',
+        relatedMetrics: { 
+          currentMemoryUsage: currentMetrics.memory.percentage,
+          memoryUsed: currentMetrics.memory.used,
+          memoryTotal: currentMetrics.memory.total
+        }
+      });
+    }
+
+    // Connection pool recommendations
+    if (currentMetrics.database.activeConnections > 80) {
+      recommendations.push({
+        id: `resource_connections_${now.getTime()}`,
+        timestamp: now,
+        type: 'resource',
+        priority: currentMetrics.database.activeConnections > 150 ? 'high' : 'medium',
+        title: 'High Database Connection Usage',
+        description: `${currentMetrics.database.activeConnections} active database connections detected`,
+        impact: 'High connection usage can lead to connection pool exhaustion',
+        effort: 'low',
+        category: 'optimization',
+        actionItems: [
+          'Optimize connection pool configuration',
+          'Implement connection pooling best practices',
+          'Add connection usage monitoring',
+          'Review long-running queries',
+          'Implement connection timeout policies'
+        ],
+        expectedBenefit: 'Better database performance and resource utilization',
+        relatedMetrics: { activeConnections: currentMetrics.database.activeConnections }
+      });
+    }
+
+    // Session management recommendations
+    if (currentMetrics.sessions.active > 1000) {
+      recommendations.push({
+        id: `resource_sessions_${now.getTime()}`,
+        timestamp: now,
+        type: 'resource',
+        priority: currentMetrics.sessions.active > 2000 ? 'high' : 'medium',
+        title: 'High Active Session Count',
+        description: `${currentMetrics.sessions.active} active sessions are consuming system resources`,
+        impact: 'High session count increases memory usage and processing overhead',
+        effort: 'medium',
+        category: 'cleanup',
+        actionItems: [
+          'Implement aggressive session cleanup policies',
+          'Add session dormancy detection',
+          'Review session timeout configurations',
+          'Implement session archival strategies',
+          'Add session usage analytics'
+        ],
+        expectedBenefit: 'Reduced memory usage and improved system performance',
+        relatedMetrics: { 
+          activeSessions: currentMetrics.sessions.active,
+          dormantSessions: currentMetrics.sessions.dormant,
+          archivedSessions: currentMetrics.sessions.archived
+        }
+      });
+    }
+
+    return recommendations;
+  }
+
+  private generateSessionRecommendations(sessionStats: SessionStatistics, _currentMetrics: SystemMetrics): Recommendation[] {
+    const recommendations: Recommendation[] = [];
+    const now = new Date();
+
+    // Session duration recommendations
+    if (sessionStats.averageSessionDuration > 86400) { // More than 24 hours
+      recommendations.push({
+        id: `session_duration_${now.getTime()}`,
+        timestamp: now,
+        type: 'configuration',
+        priority: 'medium',
+        title: 'Long Average Session Duration',
+        description: `Average session duration is ${Math.round(sessionStats.averageSessionDuration / 3600)} hours`,
+        impact: 'Long sessions consume resources and may indicate inefficient session management',
+        effort: 'low',
+        category: 'optimization',
+        actionItems: [
+          'Review session timeout policies',
+          'Implement session activity tracking',
+          'Add automatic session cleanup',
+          'Set appropriate session expiration times',
+          'Monitor session usage patterns'
+        ],
+        expectedBenefit: 'Better resource utilization and improved system performance',
+        relatedMetrics: { 
+          avgSessionDuration: sessionStats.averageSessionDuration,
+          activeSessions: sessionStats.activeSessions,
+          totalSessions: sessionStats.totalSessions
+        }
+      });
+    }
+
+    // Session failure rate recommendations
+    const failedSessions = sessionStats.sessionsByStatus['failed'] || 0;
+    const errorSessions = sessionStats.sessionsByStatus['error'] || 0;
+    const totalFailures = failedSessions + errorSessions;
+    const failureRate = (totalFailures / sessionStats.totalSessions) * 100;
+
+    if (failureRate > 10) {
+      recommendations.push({
+        id: `session_failures_${now.getTime()}`,
+        timestamp: now,
+        type: 'maintenance',
+        priority: failureRate > 25 ? 'high' : 'medium',
+        title: 'High Session Failure Rate',
+        description: `${failureRate.toFixed(1)}% of sessions are failing (${totalFailures}/${sessionStats.totalSessions})`,
+        impact: 'High failure rates indicate system reliability issues',
+        effort: 'high',
+        category: 'monitoring',
+        actionItems: [
+          'Investigate root causes of session failures',
+          'Implement better error handling and recovery',
+          'Add detailed failure logging and monitoring',
+          'Review system dependencies and connectivity',
+          'Implement retry mechanisms for transient failures'
+        ],
+        expectedBenefit: 'Improved system reliability and user experience',
+        relatedMetrics: { 
+          failureRate,
+          failedSessions: totalFailures,
+          totalSessions: sessionStats.totalSessions
+        }
+      });
+    }
+
+    return recommendations;
+  }
+
+  private generateHandoffRecommendations(handoffAnalytics: HandoffAnalytics): Recommendation[] {
+    const recommendations: Recommendation[] = [];
+    const now = new Date();
+
+    // Handoff success rate recommendations
+    if (handoffAnalytics.successRate < 90) {
+      recommendations.push({
+        id: `handoff_success_rate_${now.getTime()}`,
+        timestamp: now,
+        type: 'performance',
+        priority: handoffAnalytics.successRate < 75 ? 'high' : 'medium',
+        title: 'Low Handoff Success Rate',
+        description: `Handoff success rate is ${handoffAnalytics.successRate.toFixed(1)}% (${handoffAnalytics.successfulHandoffs}/${handoffAnalytics.totalHandoffs})`,
+        impact: 'Low success rates affect user experience and system reliability',
+        effort: 'medium',
+        category: 'optimization',
+        actionItems: [
+          'Investigate common handoff failure patterns',
+          'Implement better error handling in handoff process',
+          'Add handoff retry mechanisms',
+          'Review agent compatibility and connectivity',
+          'Optimize handoff timeout settings'
+        ],
+        expectedBenefit: 'Improved handoff reliability and user experience',
+        relatedMetrics: { 
+          successRate: handoffAnalytics.successRate,
+          totalHandoffs: handoffAnalytics.totalHandoffs,
+          failedHandoffs: handoffAnalytics.failedHandoffs
+        }
+      });
+    }
+
+    // Handoff performance recommendations
+    if (handoffAnalytics.averageProcessingTime > 5000) { // More than 5 seconds
+      recommendations.push({
+        id: `handoff_performance_${now.getTime()}`,
+        timestamp: now,
+        type: 'performance',
+        priority: handoffAnalytics.averageProcessingTime > 10000 ? 'high' : 'medium',
+        title: 'Slow Handoff Processing',
+        description: `Average handoff processing time is ${handoffAnalytics.averageProcessingTime.toFixed(0)}ms`,
+        impact: 'Slow handoffs create poor user experience and system bottlenecks',
+        effort: 'medium',
+        category: 'optimization',
+        actionItems: [
+          'Profile handoff processing pipeline',
+          'Optimize context serialization and transfer',
+          'Implement handoff process caching',
+          'Add parallel processing where possible',
+          'Review network latency between agents'
+        ],
+        expectedBenefit: 'Faster handoffs and improved user experience',
+        relatedMetrics: { 
+          avgProcessingTime: handoffAnalytics.averageProcessingTime,
+          totalHandoffs: handoffAnalytics.totalHandoffs
+        }
+      });
+    }
+
+    return recommendations;
+  }
+
+  private generateConfigurationRecommendations(_currentMetrics: SystemMetrics, trends: PerformanceTrends): Recommendation[] {
+    const recommendations: Recommendation[] = [];
+    const now = new Date();
+
+    // Database configuration recommendations
+    if (trends.databasePerformance.avgQueryTime > 500) {
+      recommendations.push({
+        id: `config_database_${now.getTime()}`,
+        timestamp: now,
+        type: 'configuration',
+        priority: trends.databasePerformance.avgQueryTime > 1000 ? 'high' : 'medium',
+        title: 'Database Performance Optimization',
+        description: `Average database query time is ${trends.databasePerformance.avgQueryTime.toFixed(0)}ms`,
+        impact: 'Slow database queries affect overall system performance',
+        effort: 'medium',
+        category: 'optimization',
+        actionItems: [
+          'Add database indexes for frequently queried columns',
+          'Optimize slow queries identified in performance logs',
+          'Implement query result caching',
+          'Review database connection pool settings',
+          'Consider database query optimization tools'
+        ],
+        expectedBenefit: 'Faster database operations and improved system responsiveness',
+        relatedMetrics: { 
+          avgQueryTime: trends.databasePerformance.avgQueryTime,
+          slowQueries: trends.databasePerformance.slowQueries,
+          totalQueries: trends.databasePerformance.totalQueries
+        }
+      });
+    }
+
+    // Monitoring configuration recommendations
+    const monitoredOperations = Object.keys(trends.operationMetrics).length;
+    if (monitoredOperations < 10) {
+      recommendations.push({
+        id: `config_monitoring_${now.getTime()}`,
+        timestamp: now,
+        type: 'configuration',
+        priority: 'low',
+        title: 'Expand Performance Monitoring',
+        description: `Only ${monitoredOperations} operations are being monitored for performance`,
+        impact: 'Limited monitoring reduces visibility into system performance',
+        effort: 'low',
+        category: 'monitoring',
+        actionItems: [
+          'Add performance monitoring to more operations',
+          'Implement comprehensive metrics collection',
+          'Set up automated performance alerting',
+          'Create performance dashboards',
+          'Add business metrics tracking'
+        ],
+        expectedBenefit: 'Better visibility into system performance and issues',
+        relatedMetrics: { monitoredOperations }
+      });
+    }
+
+    return recommendations;
+  }
+
+  // Trend analysis helper methods
+
+  private async analyzeSingleMetricTrend(metric: string, timeRange: { start: Date; end: Date }): Promise<TrendAnalysis | null> {
+    let query: string;
+    let params: any[];
+
+    // Determine the appropriate query based on metric type
+    switch (metric) {
+      case 'session_count':
+        query = `
+          SELECT DATE_TRUNC('hour', created_at) as timestamp, COUNT(*) as value
+          FROM sessions
+          WHERE created_at BETWEEN $1 AND $2
+          GROUP BY DATE_TRUNC('hour', created_at)
+          ORDER BY timestamp ASC
+        `;
+        params = [timeRange.start, timeRange.end];
+        break;
+
+      case 'handoff_success_rate':
+        query = `
+          SELECT 
+            DATE_TRUNC('hour', created_at) as timestamp,
+            (COUNT(*) FILTER (WHERE success = true) * 100.0 / COUNT(*)) as value
+          FROM performance_logs
+          WHERE operation = 'handoff' AND created_at BETWEEN $1 AND $2
+          GROUP BY DATE_TRUNC('hour', created_at)
+          HAVING COUNT(*) >= 3
+          ORDER BY timestamp ASC
+        `;
+        params = [timeRange.start, timeRange.end];
+        break;
+
+      case 'avg_response_time':
+        query = `
+          SELECT 
+            DATE_TRUNC('hour', created_at) as timestamp,
+            AVG(duration_ms) as value
+          FROM performance_logs
+          WHERE created_at BETWEEN $1 AND $2
+          GROUP BY DATE_TRUNC('hour', created_at)
+          ORDER BY timestamp ASC
+        `;
+        params = [timeRange.start, timeRange.end];
+        break;
+
+      case 'memory_usage':
+        query = `
+          SELECT 
+            DATE_TRUNC('hour', recorded_at) as timestamp,
+            AVG(metric_value) as value
+          FROM system_metrics
+          WHERE metric_name = 'memory_usage_percentage' AND recorded_at BETWEEN $1 AND $2
+          GROUP BY DATE_TRUNC('hour', recorded_at)
+          ORDER BY timestamp ASC
+        `;
+        params = [timeRange.start, timeRange.end];
+        break;
+
+      default:
+        return null;
+    }
+
+    const result = await monitoredDb.query(query, params);
+    
+    if (result.rows.length < 3) {
+      return null; // Not enough data points for trend analysis
+    }
+
+    const dataPoints = result.rows.map(row => ({
+      timestamp: new Date(row.timestamp),
+      value: parseFloat(row.value)
+    }));
+
+    // Calculate trend using linear regression
+    const n = dataPoints.length;
+    const sumX = dataPoints.reduce((sum, _point, index) => sum + index, 0);
+    const sumY = dataPoints.reduce((sum, point) => sum + point.value, 0);
+    const sumXY = dataPoints.reduce((sum, point, index) => sum + index * point.value, 0);
+    const sumXX = dataPoints.reduce((sum, _point, index) => sum + index * index, 0);
+
+    const slope = (n * sumXY - sumX * sumY) / (n * sumXX - sumX * sumX);
+    const intercept = (sumY - slope * sumX) / n;
+
+    // Calculate correlation coefficient for confidence
+    const meanX = sumX / n;
+    const meanY = sumY / n;
+    const numerator = dataPoints.reduce((sum, point, index) => sum + (index - meanX) * (point.value - meanY), 0);
+    const denomX = Math.sqrt(dataPoints.reduce((sum, _point, index) => sum + Math.pow(index - meanX, 2), 0));
+    const denomY = Math.sqrt(dataPoints.reduce((sum, point) => sum + Math.pow(point.value - meanY, 2), 0));
+    const correlation = numerator / (denomX * denomY);
+
+    // Determine trend direction
+    let trend: 'increasing' | 'decreasing' | 'stable' | 'volatile';
+    const avgValue = sumY / n;
+    const relativeSlope = Math.abs(slope) / avgValue;
+
+    if (relativeSlope < 0.01) {
+      trend = 'stable';
+    } else if (Math.abs(correlation) < 0.3) {
+      trend = 'volatile';
+    } else if (slope > 0) {
+      trend = 'increasing';
+    } else {
+      trend = 'decreasing';
+    }
+
+    // Calculate change rate (percentage change per hour)
+    const timeSpanHours = (timeRange.end.getTime() - timeRange.start.getTime()) / (1000 * 60 * 60);
+    const totalChange = slope * (n - 1);
+    const changeRate = (totalChange / avgValue) * 100 * (24 / timeSpanHours); // Normalize to daily rate
+
+    // Simple seasonality detection (look for repeating patterns)
+    const seasonality = this.detectSeasonality(dataPoints);
+
+    // Generate simple forecast (linear projection)
+    const forecast = this.generateForecast(dataPoints, slope, intercept, 24); // 24 hour forecast
+
+    return {
+      metric,
+      timeRange,
+      trend,
+      changeRate,
+      confidence: Math.abs(correlation),
+      seasonality,
+      forecast
+    };
+  }
+
+  private detectSeasonality(dataPoints: Array<{ timestamp: Date; value: number }>): { detected: boolean; period?: number; amplitude?: number } {
+    if (dataPoints.length < 24) {
+      return { detected: false };
+    }
+
+    // Simple autocorrelation-based seasonality detection
+    const values = dataPoints.map(p => p.value);
+    const mean = values.reduce((a, b) => a + b, 0) / values.length;
+    
+    // Check for 24-hour (daily) seasonality
+    const period = 24;
+    if (values.length >= period * 2) {
+      let correlation = 0;
+      let count = 0;
+      
+      for (let i = 0; i < values.length - period; i++) {
+        correlation += (values[i] - mean) * (values[i + period] - mean);
+        count++;
+      }
+      
+      correlation /= count;
+      
+      // Calculate variance for normalization
+      const variance = values.reduce((sum, val) => sum + Math.pow(val - mean, 2), 0) / values.length;
+      const normalizedCorrelation = correlation / variance;
+      
+      if (normalizedCorrelation > 0.3) {
+        // Calculate amplitude as standard deviation of detrended values
+        const amplitude = Math.sqrt(variance);
+        
+        return {
+          detected: true,
+          period,
+          amplitude
+        };
+      }
+    }
+
+    return { detected: false };
+  }
+
+  private generateForecast(
+    dataPoints: Array<{ timestamp: Date; value: number }>, 
+    slope: number, 
+    intercept: number, 
+    forecastHours: number
+  ): Array<{ timestamp: Date; predictedValue: number; confidenceInterval: { lower: number; upper: number } }> {
+    const forecast: Array<{ timestamp: Date; predictedValue: number; confidenceInterval: { lower: number; upper: number } }> = [];
+    
+    const lastTimestamp = dataPoints[dataPoints.length - 1].timestamp;
+    const n = dataPoints.length;
+    
+    // Calculate standard error for confidence intervals
+    const residuals = dataPoints.map((point, index) => {
+      const predicted = intercept + slope * index;
+      return point.value - predicted;
+    });
+    
+    const mse = residuals.reduce((sum, residual) => sum + residual * residual, 0) / (n - 2);
+    const standardError = Math.sqrt(mse);
+    
+    for (let i = 1; i <= forecastHours; i++) {
+      const forecastTimestamp = new Date(lastTimestamp.getTime() + i * 60 * 60 * 1000);
+      const predictedValue = intercept + slope * (n + i - 1);
+      
+      // 95% confidence interval (approximately ±2 standard errors)
+      const margin = 2 * standardError;
+      
+      forecast.push({
+        timestamp: forecastTimestamp,
+        predictedValue,
+        confidenceInterval: {
+          lower: predictedValue - margin,
+          upper: predictedValue + margin
+        }
+      });
+    }
+    
+    return forecast;
+  }
+
+  // Alert helper methods
+
+  private async recordAnomalyMetric(anomaly: Anomaly): Promise<void> {
+    try {
+      await monitoredDb.query(
+        `INSERT INTO system_metrics (metric_name, metric_value, metric_type, labels, recorded_at)
+         VALUES ($1, $2, $3, $4, $5)`,
+        [
+          'anomaly_detected',
+          1,
+          'counter',
+          JSON.stringify({
+            anomaly_id: anomaly.id,
+            type: anomaly.type,
+            severity: anomaly.severity,
+            confidence: anomaly.confidence
+          }),
+          anomaly.timestamp
+        ]
+      );
+    } catch (error) {
+      structuredLogger.logError(error as Error, {
+        timestamp: new Date(),
+        errorType: 'DatabaseError',
+        component: 'AnalyticsService',
+        operation: 'recordAnomalyMetric',
+        additionalInfo: { anomalyId: anomaly.id }
+      });
+    }
+  }
+
+  private async triggerCriticalAnomalyNotification(anomaly: Anomaly): Promise<void> {
+    // This would integrate with external alerting systems
+    // For now, we'll just log it as a critical event
+    structuredLogger.logSystemEvent({
+      timestamp: new Date(),
+      component: 'AnalyticsService',
+      operation: 'critical_anomaly_notification',
+      status: 'completed',
+      metadata: {
+        anomalyId: anomaly.id,
+        type: anomaly.type,
+        severity: anomaly.severity,
+        description: anomaly.description,
+        affectedComponents: anomaly.affectedComponents,
+        confidence: anomaly.confidence,
+        suggestedActions: anomaly.suggestedActions,
+        metrics: anomaly.metrics
+      }
+    });
+
+    // Record critical anomaly metric for external monitoring
+    await monitoredDb.query(
+      `INSERT INTO system_metrics (metric_name, metric_value, metric_type, labels, recorded_at)
+       VALUES ($1, $2, $3, $4, $5)`,
+      [
+        'critical_anomaly',
+        1,
+        'counter',
+        JSON.stringify({
+          anomaly_id: anomaly.id,
+          type: anomaly.type,
+          description: anomaly.description
+        }),
+        anomaly.timestamp
+      ]
+    );
+  }
+
+  private getAnomalySeverityBreakdown(anomalies: Anomaly[]): Record<string, number> {
+    const breakdown: Record<string, number> = { low: 0, medium: 0, high: 0, critical: 0 };
+    for (const anomaly of anomalies) {
+      breakdown[anomaly.severity]++;
+    }
+    return breakdown;
+  }
+
+  private getRecommendationPriorityBreakdown(recommendations: Recommendation[]): Record<string, number> {
+    const breakdown: Record<string, number> = { low: 0, medium: 0, high: 0, critical: 0 };
+    for (const recommendation of recommendations) {
+      breakdown[recommendation.priority]++;
+    }
+    return breakdown;
   }
 }
 

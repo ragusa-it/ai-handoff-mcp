@@ -50,6 +50,28 @@ export interface HandoffRequest {
   completedAt?: Date;
 }
 
+// Enhanced error handling and recovery interfaces
+export interface RecoveryCheckpoint {
+  id: string;
+  sessionId: string;
+  checkpointId: string;
+  timestamp: Date;
+  sessionState: string; // JSON
+  contextSnapshot: string; // JSON
+  metadata: Record<string, any>;
+  dataIntegrity: string; // JSON
+}
+
+export interface RecoveryBackup {
+  id: string;
+  backupId: string;
+  sessionId: string;
+  timestamp: Date;
+  sessionData: string; // JSON
+  contextData: string; // JSON
+}
+}
+
 // New monitoring interfaces
 export interface SessionLifecycleEvent {
   id: string;
@@ -360,4 +382,43 @@ export const createMonitoringViews = `
   WHERE created_at >= NOW() - INTERVAL '24 hours'
   GROUP BY operation
   ORDER BY total_calls DESC;
+`;
+
+// Recovery checkpoint table
+export const createRecoveryCheckpointsTable = `
+  CREATE TABLE IF NOT EXISTS recovery_checkpoints (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    session_id UUID NOT NULL,
+    checkpoint_id VARCHAR(255) NOT NULL,
+    timestamp TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW(),
+    session_state JSONB NOT NULL,
+    context_snapshot JSONB NOT NULL,
+    metadata JSONB DEFAULT '{}',
+    data_integrity JSONB NOT NULL,
+    created_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW(),
+    
+    UNIQUE(session_id, checkpoint_id)
+  );
+  
+  -- Indexes for recovery checkpoints
+  CREATE INDEX IF NOT EXISTS idx_recovery_checkpoints_session_id ON recovery_checkpoints(session_id);
+  CREATE INDEX IF NOT EXISTS idx_recovery_checkpoints_timestamp ON recovery_checkpoints(timestamp);
+  CREATE INDEX IF NOT EXISTS idx_recovery_checkpoints_session_timestamp ON recovery_checkpoints(session_id, timestamp DESC);
+`;
+
+// Recovery backup table
+export const createRecoveryBackupsTable = `
+  CREATE TABLE IF NOT EXISTS recovery_backups (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    backup_id VARCHAR(255) NOT NULL UNIQUE,
+    session_id UUID NOT NULL,
+    timestamp TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW(),
+    session_data JSONB NOT NULL,
+    context_data JSONB NOT NULL,
+    created_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW()
+  );
+  
+  -- Indexes for recovery backups
+  CREATE INDEX IF NOT EXISTS idx_recovery_backups_session_id ON recovery_backups(session_id);
+  CREATE INDEX IF NOT EXISTS idx_recovery_backups_timestamp ON recovery_backups(timestamp);
 `;

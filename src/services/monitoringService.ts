@@ -1,6 +1,7 @@
 import { db } from '../database/index.js';
 import { structuredLogger } from './structuredLogger.js';
 import { PerformanceTimer } from '../mcp/utils/performance.js';
+import type { IConfigurationManager } from './configurationManager.js';
 
 // Health status interfaces
 export interface ComponentHealth {
@@ -73,14 +74,26 @@ export interface SystemMetrics {
 export interface MonitoringConfig {
   healthCheckInterval: number; // seconds
   metricsCollectionInterval: number; // seconds
+  performanceTrackingEnabled: boolean;
   alertThresholds: {
     responseTime: number; // ms
     errorRate: number; // percentage
     memoryUsage: number; // percentage
     diskUsage: number; // percentage
+    cpuUsage: number; // percentage
+    sessionCount: number; // max concurrent sessions
   };
   enablePrometheusExport: boolean;
   enableHealthEndpoint: boolean;
+  enableStructuredLogging: boolean;
+  logLevel: 'error' | 'warn' | 'info' | 'debug';
+  enableAuditTrail: boolean;
+  anomalyDetectionEnabled: boolean;
+  anomalyDetectionThresholds: {
+    sessionDurationZScore: number;
+    contextSizeZScore: number;
+    handoffFrequencyZScore: number;
+  };
 }
 
 /**
@@ -144,18 +157,46 @@ export class MonitoringService implements IMonitoringService {
     this.config = {
       healthCheckInterval: 30, // 30 seconds
       metricsCollectionInterval: 60, // 60 seconds
+      performanceTrackingEnabled: true,
       alertThresholds: {
         responseTime: 1000, // 1 second
         errorRate: 5, // 5%
         memoryUsage: 80, // 80%
-        diskUsage: 85 // 85%
+        diskUsage: 85, // 85%
+        cpuUsage: 80, // 80%
+        sessionCount: 1000 // 1000 sessions
       },
       enablePrometheusExport: true,
       enableHealthEndpoint: true,
+      enableStructuredLogging: true,
+      logLevel: 'info',
+      enableAuditTrail: true,
+      anomalyDetectionEnabled: true,
+      anomalyDetectionThresholds: {
+        sessionDurationZScore: 2.5,
+        contextSizeZScore: 2.5,
+        handoffFrequencyZScore: 2.5
+      },
       ...config
     };
     
     this.startTime = new Date();
+  }
+
+  /**
+   * Set the configuration manager for dynamic configuration updates
+   */
+  setConfigurationManager(configManager: IConfigurationManager): void {
+    // Load current monitoring configuration
+    this.config = { ...this.config, ...configManager.getMonitoringConfig() };
+    
+    // Listen for configuration changes
+    configManager.on('configChanged', (newConfig) => {
+      const newMonitoringConfig = newConfig.monitoring;
+      if (newMonitoringConfig) {
+        this.updateConfig(newMonitoringConfig);
+      }
+    });
   }
 
   /**

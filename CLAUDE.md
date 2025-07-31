@@ -162,67 +162,106 @@ Use all MCP tools at your disposal
 ---
 
 ## AI Development Team Configuration
-*Configured by team-configurator on 2025-07-30*
+*Updated by team-configurator on 2025-07-30*
 
-**Detected Stack**: Node.js + TypeScript, PostgreSQL, Redis, MCP Protocol, Jest Testing
+**Detected Stack**: Node.js + TypeScript, PostgreSQL, Redis, MCP Protocol (@modelcontextprotocol/sdk), Jest Testing, Advanced Analytics & Monitoring
 
 ### Specialist Assignments
 
-- **API Architecture & MCP Protocol** → @api-architect
-  - MCP tool design, protocol implementation
-  - RESTful patterns, resource endpoints
-  - Schema validation and error handling
+- **MCP Protocol & API Architecture** → @api-architect
+  - MCP tool handlers (registerSession, updateContext, requestHandoff, analyzeCodebase)
+  - Resource endpoints (handoff://sessions, handoff://context/{sessionKey}, handoff://jobs)
+  - Schema validation with Zod and proper error handling
+  - Protocol compliance and MCP SDK integration
+  - McpError handling with proper ErrorCode enum values
 
-- **Backend Services & Logic** → @backend-developer  
-  - Service layer implementation (contextManager, codebaseAnalyzer)
-  - Database integration patterns
-  - Background job scheduling and monitoring
+- **Backend Services & Business Logic** → @backend-developer
+  - Core services (contextManager, codebaseAnalyzer, sessionManager, backgroundJobScheduler)
+  - Session lifecycle management and archival policies
+  - Service orchestration and business logic patterns
+  - Performance monitoring and structured logging integration
+  - ESM module patterns and TypeScript best practices
 
-- **Database Design & Optimization** → @backend-developer
-  - PostgreSQL schema design and migrations
-  - Redis caching strategies
-  - Query optimization and indexing
+- **Analytics & Monitoring Systems** → @performance-optimizer
+  - Advanced analytics service with anomaly detection capabilities
+  - System metrics collection and performance trend analysis
+  - Structured logging service and observability endpoints
+  - Monitored database operations and performance instrumentation
+  - Real-time session monitoring and health checks
 
-- **Code Quality & Reviews** → @code-reviewer
-  - TypeScript best practices
-  - Architecture pattern validation
-  - Security and performance review
+- **Testing & Quality Engineering** → @code-reviewer
+  - Comprehensive test suite for services (analyticsService, monitoringService, sessionManager)
+  - Integration tests for MCP tools and database operations
+  - Anomaly detection testing and performance test scenarios
+  - TypeScript strict mode compliance and error handling patterns
+  - Code coverage analysis and testing strategy optimization
 
-- **Performance & Monitoring** → @performance-optimizer
-  - Database connection pooling
-  - Caching strategy optimization
-  - Session monitoring and analytics
+- **DevOps & Infrastructure** → @backend-developer
+  - Docker Compose services (PostgreSQL 15, Redis 7, pgAdmin)
+  - Database migration scripts and enhanced schema management
+  - Environment configuration and secrets management
+  - CI/CD pipeline optimization and deployment strategies
 
-- **Documentation & Specs** → @documentation-specialist
-  - Technical documentation
-  - API documentation
-  - Code comments and JSDoc
+### Advanced Use Cases for Your Team
 
-### How to Use Your Specialized Team
+**For MCP Protocol & API Development:**
+- "Add a new MCP tool for real-time session analytics dashboard"
+- "Implement batch context processing with monitored error handling"
+- "Create resource endpoints for live monitoring dashboard data"
+- "Review MCP tool performance and add comprehensive instrumentation"
+- "Enhance schema validation with custom Zod error messages"
 
-**For MCP Protocol Work:**
-- "Design a new MCP tool for session analytics"
-- "Review the tool handler error handling patterns"
-- "Optimize the resource endpoint implementations"
+**For Analytics & Monitoring Systems:**
+- "Implement advanced anomaly detection for session patterns and context growth"
+- "Create performance dashboards with handoff success rate analytics"
+- "Add intelligent alerting for system health degradation and resource usage"
+- "Optimize analytics aggregation queries for large-scale session datasets"
+- "Develop predictive models for session lifecycle patterns"
 
-**For Backend Development:**
-- "Implement a new service for user management"
-- "Add background job processing for data cleanup"
-- "Create monitoring endpoints for system health"
+**For Backend Services & Business Logic:**
+- "Enhance session lifecycle management with intelligent retention policies"
+- "Implement Redis caching strategies with performance monitoring"
+- "Add background job processing with comprehensive monitoring and recovery"
+- "Create service health checks with automatic failover mechanisms"
+- "Optimize context summarization algorithms for large conversations"
 
-**For Database Work:**
-- "Design schema for enhanced session tracking"
-- "Optimize context history queries with better indexing"
-- "Implement Redis caching for frequent lookups"
+**For Testing & Quality Engineering:**
+- "Create comprehensive integration tests for the entire analytics pipeline"
+- "Add performance benchmarks for concurrent session handling"
+- "Implement end-to-end tests for MCP protocol compliance"
+- "Review error handling patterns and add chaos engineering tests"
+- "Validate anomaly detection accuracy through synthetic data testing"
 
-**For Code Quality:**
-- "Review my TypeScript service implementations"
-- "Check MCP tool handlers for proper error handling"
-- "Validate the database connection patterns"
+**For DevOps & Infrastructure:**
+- "Set up comprehensive monitoring stack with Grafana and Prometheus"
+- "Implement database connection pooling with automated scaling"
+- "Add Redis cluster support for high availability and failover"
+- "Create automated backup strategies for session data and analytics"
+- "Optimize Docker Compose setup for development and production"
 
-**For Performance:**
-- "Analyze database query performance bottlenecks"
-- "Optimize Redis usage patterns"
-- "Review memory usage in context processing"
+### Current Project Strengths
 
-Your specialized AI development team is configured and ready to help with your MCP server project!
+Your AI development team is expertly configured for:
+
+**Recent Development Focus (Active):**
+- Advanced analytics service with real-time anomaly detection
+- Comprehensive session monitoring and lifecycle management
+- Structured logging with performance instrumentation
+- Background job processing with automated cleanup
+- Enhanced database schema with monitoring views
+
+**Core Technical Capabilities:**
+- MCP Protocol expertise with @modelcontextprotocol/sdk integration
+- TypeScript strict mode with ESM module patterns
+- PostgreSQL with advanced schema design and indexing
+- Redis caching with performance optimization
+- Jest testing with comprehensive coverage strategies
+
+**System Architecture Excellence:**
+- Monitored database operations with performance tracking
+- Service-oriented architecture with proper error handling
+- Observability-first design with structured logging
+- Scalable background job processing
+- Real-time analytics with trend analysis
+
+Your specialized AI development team is perfectly optimized for enterprise-grade MCP server development with advanced monitoring and analytics capabilities!
