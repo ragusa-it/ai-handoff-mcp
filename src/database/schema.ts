@@ -70,7 +70,6 @@ export interface RecoveryBackup {
   sessionData: string; // JSON
   contextData: string; // JSON
 }
-}
 
 // New monitoring interfaces
 export interface SessionLifecycleEvent {

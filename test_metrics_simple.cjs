@@ -1,5 +1,5 @@
 // Simple test to verify metrics collection is working
-import { MetricsCollector } from './dist/metrics/metricsCollection.js';
+const { MetricsCollector } = require('./dist/metrics/metricsCollection');
 
 async function testMetrics() {
   console.log('Testing metrics collection...');
