@@ -222,11 +222,13 @@ export class MonitoringService implements IMonitoringService {
       this.config.metricsCollectionInterval * 1000
     );
 
-    structuredLogger.logSystemEvent({
+    structuredLogger.info('Monitoring service started', {
       timestamp: new Date(),
-      component: 'MonitoringService',
-      operation: 'start',
-      status: 'completed'
+      metadata: {
+        component: 'MonitoringService',
+        operation: 'start',
+        status: 'completed'
+      }
     });
 
     console.log('✅ Monitoring service started');
@@ -252,11 +254,13 @@ export class MonitoringService implements IMonitoringService {
       this.metricsCollectionTimer = undefined;
     }
 
-    structuredLogger.logSystemEvent({
+    structuredLogger.info('Monitoring service stopped', {
       timestamp: new Date(),
-      component: 'MonitoringService',
-      operation: 'stop',
-      status: 'completed'
+      metadata: {
+        component: 'MonitoringService',
+        operation: 'stop',
+        status: 'completed'
+      }
     });
 
     console.log('✅ Monitoring service stopped');
@@ -297,23 +301,28 @@ export class MonitoringService implements IMonitoringService {
       };
 
       // Log health check performance
-      structuredLogger.logPerformanceMetric({
-        timestamp: new Date(),
+    structuredLogger.info('Health check completed', {
+      timestamp: new Date(),
+      metadata: {
         metricName: 'health_check_duration',
         metricValue: timer.getElapsed(),
         metricType: 'timer',
         unit: 'ms',
         tags: { overall_status: overall }
-      });
+      }
+    });
 
       return healthStatus;
     } catch (error) {
-      structuredLogger.logError(error as Error, {
-        timestamp: new Date(),
+    structuredLogger.error('System health check failed', {
+      timestamp: new Date(),
+      metadata: {
         errorType: 'SystemError',
         component: 'MonitoringService',
-        operation: 'getSystemHealth'
-      });
+        operation: 'getSystemHealth',
+        errorMessage: (error as Error).message
+      }
+    });
 
       return {
         overall: 'unhealthy',
@@ -364,12 +373,15 @@ export class MonitoringService implements IMonitoringService {
     } catch (error) {
       const responseTime = timer.getElapsed();
       
-      structuredLogger.logError(error as Error, {
-        timestamp: new Date(),
+    structuredLogger.error('Database health check failed', {
+      timestamp: new Date(),
+      metadata: {
         errorType: 'SystemError',
         component: 'DatabaseHealthCheck',
-        operation: 'checkDatabaseHealth'
-      });
+        operation: 'checkDatabaseHealth',
+        errorMessage: (error as Error).message
+      }
+    });
 
       return {
         status: 'unhealthy',
@@ -424,12 +436,15 @@ export class MonitoringService implements IMonitoringService {
     } catch (error) {
       const responseTime = timer.getElapsed();
       
-      structuredLogger.logError(error as Error, {
-        timestamp: new Date(),
+    structuredLogger.error('Redis health check failed', {
+      timestamp: new Date(),
+      metadata: {
         errorType: 'SystemError',
         component: 'RedisHealthCheck',
-        operation: 'checkRedisHealth'
-      });
+        operation: 'checkRedisHealth',
+        errorMessage: (error as Error).message
+      }
+    });
 
       return {
         status: 'unhealthy',
@@ -492,12 +507,15 @@ export class MonitoringService implements IMonitoringService {
     } catch (error) {
       const responseTime = timer.getElapsed();
       
-      structuredLogger.logError(error as Error, {
-        timestamp: new Date(),
+    structuredLogger.error('System health check failed', {
+      timestamp: new Date(),
+      metadata: {
         errorType: 'SystemError',
         component: 'SystemHealthCheck',
-        operation: 'checkSystemHealth'
-      });
+        operation: 'checkSystemHealth',
+        errorMessage: (error as Error).message
+      }
+    });
 
       return {
         status: 'unhealthy',
@@ -522,8 +540,9 @@ export class MonitoringService implements IMonitoringService {
       this.metrics.toolCalls.set(toolName, existing);
 
       // Log performance metric
-      structuredLogger.logPerformanceMetric({
-        timestamp: new Date(),
+    structuredLogger.info('Tool call recorded', {
+      timestamp: new Date(),
+      metadata: {
         metricName: 'tool_call_duration',
         metricValue: duration,
         metricType: 'timer',
@@ -533,27 +552,34 @@ export class MonitoringService implements IMonitoringService {
           success: success.toString()
         },
         metadata: metadata || {}
-      });
+      }
+    });
 
       // Store in database for historical analysis
       this.storePerformanceLog('tool_call', duration, success, undefined, {
         tool_name: toolName,
         ...metadata
       }).catch(error => {
-        structuredLogger.logError(error, {
-          timestamp: new Date(),
-          errorType: 'SystemError',
-          component: 'MonitoringService',
-          operation: 'recordToolCall'
-        });
-      });
-    } catch (error) {
-      structuredLogger.logError(error as Error, {
-        timestamp: new Date(),
+    structuredLogger.error('Failed to store tool call metrics', {
+      timestamp: new Date(),
+      metadata: {
         errorType: 'SystemError',
         component: 'MonitoringService',
-        operation: 'recordToolCall'
+        operation: 'recordToolCall',
+        errorMessage: (error as Error).message
+      }
+    });
       });
+    } catch (error) {
+    structuredLogger.error('Failed to record tool call', {
+      timestamp: new Date(),
+      metadata: {
+        errorType: 'SystemError',
+        component: 'MonitoringService',
+        operation: 'recordToolCall',
+        errorMessage: (error as Error).message
+      }
+    });
     }
   }
 
@@ -574,8 +600,10 @@ export class MonitoringService implements IMonitoringService {
       this.metrics.handoffs.set(handoffKey, existing);
 
       // Log performance metric
-      structuredLogger.logPerformanceMetric({
-        timestamp: new Date(),
+    structuredLogger.info('Handoff metrics recorded', {
+      timestamp: new Date(),
+      sessionId,
+      metadata: {
         metricName: 'handoff_duration',
         metricValue: metrics.duration,
         metricType: 'timer',
@@ -584,9 +612,9 @@ export class MonitoringService implements IMonitoringService {
           agent_from: metrics.agentFrom,
           agent_to: metrics.agentTo,
           success: metrics.success.toString()
-        },
-        sessionId
-      });
+        }
+      }
+    });
 
       // Store in database for historical analysis
       this.storePerformanceLog('handoff', metrics.duration, metrics.success, sessionId, {
@@ -595,20 +623,26 @@ export class MonitoringService implements IMonitoringService {
         context_size: metrics.contextSize,
         error_type: metrics.errorType
       }).catch(error => {
-        structuredLogger.logError(error, {
-          timestamp: new Date(),
-          errorType: 'SystemError',
-          component: 'MonitoringService',
-          operation: 'recordHandoffMetrics'
-        });
-      });
-    } catch (error) {
-      structuredLogger.logError(error as Error, {
-        timestamp: new Date(),
+    structuredLogger.error('Failed to store handoff metrics', {
+      timestamp: new Date(),
+      metadata: {
         errorType: 'SystemError',
         component: 'MonitoringService',
-        operation: 'recordHandoffMetrics'
+        operation: 'recordHandoffMetrics',
+        errorMessage: (error as Error).message
+      }
+    });
       });
+    } catch (error) {
+    structuredLogger.error('Failed to record handoff metrics', {
+      timestamp: new Date(),
+      metadata: {
+        errorType: 'SystemError',
+        component: 'MonitoringService',
+        operation: 'recordHandoffMetrics',
+        errorMessage: (error as Error).message
+      }
+    });
     }
   }
 
@@ -618,8 +652,9 @@ export class MonitoringService implements IMonitoringService {
   recordPerformanceMetrics(_operation: string, metrics: PerformanceMetrics): void {
     try {
       // Log performance metric
-      structuredLogger.logPerformanceMetric({
-        timestamp: new Date(),
+    structuredLogger.info('Operation metrics recorded', {
+      timestamp: new Date(),
+      metadata: {
         metricName: 'operation_duration',
         metricValue: metrics.duration,
         metricType: 'timer',
@@ -629,7 +664,8 @@ export class MonitoringService implements IMonitoringService {
           success: metrics.success.toString()
         },
         metadata: metrics.metadata || {}
-      });
+      }
+    });
 
       // Store in database for historical analysis
       this.storePerformanceLog(metrics.operation, metrics.duration, metrics.success, undefined, {
@@ -637,20 +673,26 @@ export class MonitoringService implements IMonitoringService {
         cpu_usage: metrics.cpuUsage,
         ...metrics.metadata
       }).catch(error => {
-        structuredLogger.logError(error, {
-          timestamp: new Date(),
-          errorType: 'SystemError',
-          component: 'MonitoringService',
-          operation: 'recordPerformanceMetrics'
-        });
-      });
-    } catch (error) {
-      structuredLogger.logError(error as Error, {
-        timestamp: new Date(),
+    structuredLogger.error('Failed to store performance metrics', {
+      timestamp: new Date(),
+      metadata: {
         errorType: 'SystemError',
         component: 'MonitoringService',
-        operation: 'recordPerformanceMetrics'
+        operation: 'recordPerformanceMetrics',
+        errorMessage: (error as Error).message
+      }
+    });
       });
+    } catch (error) {
+    structuredLogger.error('Failed to record performance metrics', {
+      timestamp: new Date(),
+      metadata: {
+        errorType: 'SystemError',
+        component: 'MonitoringService',
+        operation: 'recordPerformanceMetrics',
+        errorMessage: (error as Error).message
+      }
+    });
     }
   }
 
@@ -672,8 +714,9 @@ export class MonitoringService implements IMonitoringService {
       this.metrics.databaseQueries.set(sanitizedQuery, existing);
 
       // Log performance metric
-      structuredLogger.logPerformanceMetric({
-        timestamp: new Date(),
+    structuredLogger.info('Database query recorded', {
+      timestamp: new Date(),
+      metadata: {
         metricName: 'database_query_duration',
         metricValue: duration,
         metricType: 'timer',
@@ -681,26 +724,30 @@ export class MonitoringService implements IMonitoringService {
         tags: {
           success: success.toString()
         }
-      });
+      }
+    });
 
       // Store in database for historical analysis (avoid recursion by not storing DB query metrics in DB)
       if (duration > this.config.alertThresholds.responseTime) {
-        structuredLogger.logWarning(`Slow database query detected: ${duration}ms`, {
-          timestamp: new Date(),
-          warningType: 'Performance',
-          component: 'DatabaseQuery',
-          threshold: this.config.alertThresholds.responseTime,
-          currentValue: duration,
-          recommendation: 'Consider optimizing query or adding indexes'
-        });
+    structuredLogger.warn(`Slow database query detected: ${duration}ms`, {
+      timestamp: new Date(),
+      warningType: 'Performance',
+      component: 'DatabaseQuery',
+      threshold: this.config.alertThresholds.responseTime,
+      currentValue: duration,
+      recommendation: 'Consider optimizing query or adding indexes'
+    } as any);
       }
     } catch (error) {
-      structuredLogger.logError(error as Error, {
-        timestamp: new Date(),
+    structuredLogger.error('Failed to record database query', {
+      timestamp: new Date(),
+      metadata: {
         errorType: 'SystemError',
         component: 'MonitoringService',
-        operation: 'recordDatabaseQuery'
-      });
+        operation: 'recordDatabaseQuery',
+        errorMessage: (error as Error).message
+      }
+    });
     }
   }
 
@@ -719,8 +766,9 @@ export class MonitoringService implements IMonitoringService {
       this.metrics.redisOperations.set(operation, existing);
 
       // Log performance metric
-      structuredLogger.logPerformanceMetric({
-        timestamp: new Date(),
+    structuredLogger.info('Redis operation recorded', {
+      timestamp: new Date(),
+      metadata: {
         metricName: 'redis_operation_duration',
         metricValue: duration,
         metricType: 'timer',
@@ -729,26 +777,30 @@ export class MonitoringService implements IMonitoringService {
           operation,
           success: success.toString()
         }
-      });
+      }
+    });
 
       // Alert on slow Redis operations
       if (duration > this.config.alertThresholds.responseTime / 2) { // Redis should be faster than DB
-        structuredLogger.logWarning(`Slow Redis operation detected: ${operation} took ${duration}ms`, {
-          timestamp: new Date(),
-          warningType: 'Performance',
-          component: 'RedisOperation',
-          threshold: this.config.alertThresholds.responseTime / 2,
-          currentValue: duration,
-          recommendation: 'Check Redis connectivity and memory usage'
-        });
+    structuredLogger.warn(`Slow Redis operation detected: ${operation} took ${duration}ms`, {
+      timestamp: new Date(),
+      warningType: 'Performance',
+      component: 'RedisOperation',
+      threshold: this.config.alertThresholds.responseTime / 2,
+      currentValue: duration,
+      recommendation: 'Check Redis connectivity and memory usage'
+    } as any);
       }
     } catch (error) {
-      structuredLogger.logError(error as Error, {
-        timestamp: new Date(),
+    structuredLogger.error('Failed to record Redis operation', {
+      timestamp: new Date(),
+      metadata: {
         errorType: 'SystemError',
         component: 'MonitoringService',
-        operation: 'recordRedisOperation'
-      });
+        operation: 'recordRedisOperation',
+        errorMessage: (error as Error).message
+      }
+    });
     }
   }
 
@@ -862,12 +914,15 @@ export class MonitoringService implements IMonitoringService {
 
       return lines.join('\n') + '\n';
     } catch (error) {
-      structuredLogger.logError(error as Error, {
-        timestamp: new Date(),
+    structuredLogger.error('Failed to generate Prometheus metrics', {
+      timestamp: new Date(),
+      metadata: {
         errorType: 'SystemError',
         component: 'MonitoringService',
-        operation: 'getPrometheusMetrics'
-      });
+        operation: 'getPrometheusMetrics',
+        errorMessage: (error as Error).message
+      }
+    });
       return '';
     }
   }
@@ -920,12 +975,15 @@ export class MonitoringService implements IMonitoringService {
         }
       };
     } catch (error) {
-      structuredLogger.logError(error as Error, {
-        timestamp: new Date(),
+    structuredLogger.error('Failed to get system metrics', {
+      timestamp: new Date(),
+      metadata: {
         errorType: 'SystemError',
         component: 'MonitoringService',
-        operation: 'getSystemMetrics'
-      });
+        operation: 'getSystemMetrics',
+        errorMessage: (error as Error).message
+      }
+    });
 
       // Return default metrics on error
       const memoryUsage = process.memoryUsage();
@@ -950,12 +1008,14 @@ export class MonitoringService implements IMonitoringService {
   updateConfig(config: Partial<MonitoringConfig>): void {
     this.config = { ...this.config, ...config };
     
-    structuredLogger.logSystemEvent({
+    structuredLogger.info('Monitoring configuration updated', {
       timestamp: new Date(),
-      component: 'MonitoringService',
-      operation: 'updateConfig',
-      status: 'completed',
-      metadata: config
+      metadata: {
+        component: 'MonitoringService',
+        operation: 'updateConfig',
+        status: 'completed',
+        config
+      }
     });
   }
 
@@ -968,23 +1028,26 @@ export class MonitoringService implements IMonitoringService {
       
       // Alert on unhealthy status
       if (health.overall === 'unhealthy') {
-        structuredLogger.logWarning('System health check failed', {
-          timestamp: new Date(),
-          warningType: 'Resource',
-          component: 'SystemHealth',
-          recommendation: 'Check component health details'
-        });
+    structuredLogger.warn('System health check failed', {
+      timestamp: new Date(),
+      warningType: 'Resource',
+      component: 'SystemHealth',
+      recommendation: 'Check component health details'
+    } as any);
       }
 
       // Update system metrics
       this.updateSystemMetrics();
     } catch (error) {
-      structuredLogger.logError(error as Error, {
-        timestamp: new Date(),
+    structuredLogger.error('Failed to perform periodic health check', {
+      timestamp: new Date(),
+      metadata: {
         errorType: 'SystemError',
         component: 'MonitoringService',
-        operation: 'performPeriodicHealthCheck'
-      });
+        operation: 'performPeriodicHealthCheck',
+        errorMessage: (error as Error).message
+      }
+    });
     }
   }
 
@@ -1006,12 +1069,15 @@ export class MonitoringService implements IMonitoringService {
       // Perform hourly aggregations
       await this.performHourlyAggregations();
     } catch (error) {
-      structuredLogger.logError(error as Error, {
-        timestamp: new Date(),
+    structuredLogger.error('Failed to collect system metrics', {
+      timestamp: new Date(),
+      metadata: {
         errorType: 'SystemError',
         component: 'MonitoringService',
-        operation: 'collectSystemMetrics'
-      });
+        operation: 'collectSystemMetrics',
+        errorMessage: (error as Error).message
+      }
+    });
     }
   }
 
@@ -1068,20 +1134,26 @@ export class MonitoringService implements IMonitoringService {
       // Store the aggregation
       await this.storeMetricsAggregation('hourly_performance', hourBucket, aggregationData);
 
-      structuredLogger.logSystemEvent({
-        timestamp: new Date(),
+    structuredLogger.info('Hourly aggregations completed', {
+      timestamp: new Date(),
+      metadata: {
         component: 'MonitoringService',
         operation: 'performHourlyAggregations',
         status: 'completed',
-        metadata: { hourBucket: hourBucket.toISOString(), operationsCount: Object.keys(aggregationData.operations).length }
-      });
+        hourBucket: hourBucket.toISOString(),
+        operationsCount: Object.keys(aggregationData.operations).length
+      }
+    });
     } catch (error) {
-      structuredLogger.logError(error as Error, {
-        timestamp: new Date(),
+    structuredLogger.error('Failed to perform hourly aggregations', {
+      timestamp: new Date(),
+      metadata: {
         errorType: 'SystemError',
         component: 'MonitoringService',
-        operation: 'performHourlyAggregations'
-      });
+        operation: 'performHourlyAggregations',
+        errorMessage: (error as Error).message
+      }
+    });
     }
   }
 
@@ -1096,14 +1168,14 @@ export class MonitoringService implements IMonitoringService {
     
     // Alert on high memory usage
     if (memoryPercentage > this.config.alertThresholds.memoryUsage) {
-      structuredLogger.logWarning(`High memory usage detected: ${memoryPercentage.toFixed(2)}%`, {
-        timestamp: new Date(),
-        warningType: 'Resource',
-        component: 'SystemMemory',
-        threshold: this.config.alertThresholds.memoryUsage,
-        currentValue: memoryPercentage,
-        recommendation: 'Consider restarting the service or investigating memory leaks'
-      });
+    structuredLogger.warn(`High memory usage detected: ${memoryPercentage.toFixed(2)}%`, {
+      timestamp: new Date(),
+      warningType: 'Resource',
+      component: 'SystemMemory',
+      threshold: this.config.alertThresholds.memoryUsage,
+      currentValue: memoryPercentage,
+      recommendation: 'Consider restarting the service or investigating memory leaks'
+    } as any);
     }
   }
 
@@ -1179,12 +1251,15 @@ export class MonitoringService implements IMonitoringService {
         );
       }
     } catch (error) {
-      structuredLogger.logError(error as Error, {
-        timestamp: new Date(),
+    structuredLogger.error('Failed to store system metrics', {
+      timestamp: new Date(),
+      metadata: {
         errorType: 'SystemError',
         component: 'MonitoringService',
-        operation: 'storeSystemMetrics'
-      });
+        operation: 'storeSystemMetrics',
+        errorMessage: (error as Error).message
+      }
+    });
     }
   }
 
@@ -1207,12 +1282,15 @@ export class MonitoringService implements IMonitoringService {
       const result = await db.query(query, [metricName, timeRange.start, timeRange.end]);
       return parseFloat(result.rows[0]?.result || '0');
     } catch (error) {
-      structuredLogger.logError(error as Error, {
-        timestamp: new Date(),
+    structuredLogger.error('Failed to get metrics aggregation', {
+      timestamp: new Date(),
+      metadata: {
         errorType: 'SystemError',
         component: 'MonitoringService',
-        operation: 'getMetricsAggregation'
-      });
+        operation: 'getMetricsAggregation',
+        errorMessage: (error as Error).message
+      }
+    });
       return 0;
     }
   }
@@ -1246,12 +1324,15 @@ export class MonitoringService implements IMonitoringService {
           successRate: parseFloat(row.success_rate || '0')
         }));
     } catch (error) {
-      structuredLogger.logError(error as Error, {
-        timestamp: new Date(),
+    structuredLogger.error('Failed to get performance trends', {
+      timestamp: new Date(),
+      metadata: {
         errorType: 'SystemError',
         component: 'MonitoringService',
-        operation: 'getPerformanceTrends'
-      });
+        operation: 'getPerformanceTrends',
+        errorMessage: (error as Error).message
+      }
+    });
       return [];
     }
   }
@@ -1270,12 +1351,15 @@ export class MonitoringService implements IMonitoringService {
         [aggregationType, timeBucket, JSON.stringify(aggregationData)]
       );
     } catch (error) {
-      structuredLogger.logError(error as Error, {
-        timestamp: new Date(),
+    structuredLogger.error('Failed to store metrics aggregation', {
+      timestamp: new Date(),
+      metadata: {
         errorType: 'SystemError',
         component: 'MonitoringService',
-        operation: 'storeMetricsAggregation'
-      });
+        operation: 'storeMetricsAggregation',
+        errorMessage: (error as Error).message
+      }
+    });
     }
   }
 

@@ -70,13 +70,13 @@ export class EnhancedError extends Error {
   public readonly severity: ErrorSeverity;
   public readonly component: string;
   public readonly operation: string;
-  public readonly sessionId?: string;
-  public readonly userId?: string;
+  public readonly sessionId: string | undefined;
+  public readonly userId: string | undefined;
   public readonly metadata: Record<string, any>;
   public readonly timestamp: Date;
-  public readonly requestId?: string;
-  public readonly traceId?: string;
-  public readonly originalError?: Error;
+  public readonly requestId: string | undefined;
+  public readonly traceId: string | undefined;
+  public readonly originalError: Error | undefined;
   public readonly errorCode: string;
   
   constructor(
@@ -267,12 +267,15 @@ export class ErrorHandlerService {
           
           // Log successful recovery if we had previous failures
           if (attempt > 1) {
-            structuredLogger.logInfo('Operation recovered after retries', {
-              component: context.component,
-              operation: context.operation,
-              attemptsUsed,
-              totalTimeMs: Date.now() - startTime,
-              sessionId: context.sessionId
+            structuredLogger.info('Operation recovered after retries', {
+              timestamp: new Date(),
+              metadata: {
+                component: context.component,
+                operation: context.operation,
+                attemptsUsed,
+                totalTimeMs: Date.now() - startTime,
+                sessionId: context.sessionId
+              }
             });
           }
           
@@ -313,12 +316,16 @@ export class ErrorHandlerService {
           await this.logAndAlert(lastError);
         }
         
-        structuredLogger.logWarning('Fallback mechanism activated', {
+        structuredLogger.warn('Fallback mechanism activated', {
+          timestamp: new Date(),
+          warningType: 'Performance',
           component: context.component,
-          operation: context.operation,
-          originalError: lastError?.message,
-          sessionId: context.sessionId
-        });
+          metadata: {
+            operation: context.operation,
+            originalError: lastError?.message,
+            sessionId: context.sessionId
+          }
+        } as any);
         
         return {
           success: true,
@@ -343,7 +350,7 @@ export class ErrorHandlerService {
     
     return {
       success: false,
-      error: lastError,
+      error: lastError as EnhancedError,
       attemptsUsed,
       totalTimeMs: Date.now() - startTime,
       recoveryApplied: attemptsUsed > 1 || recoveryConfig.strategy === RecoveryStrategy.FALLBACK,
@@ -370,19 +377,23 @@ export class ErrorHandlerService {
    */
   async logAndAlert(error: EnhancedError): Promise<void> {
     // Always log the error
-    structuredLogger.logError(error, {
-      errorCode: error.errorCode,
-      category: error.category,
-      severity: error.severity,
-      component: error.component,
-      operation: error.operation,
-      sessionId: error.sessionId,
-      metadata: error.metadata
+    structuredLogger.error(error.message, {
+      timestamp: new Date(),
+      metadata: {
+        errorType: error.category,
+        component: error.component,
+        operation: error.operation,
+        errorCode: error.errorCode,
+        category: error.category,
+        severity: error.severity,
+        sessionId: error.sessionId,
+        ...error.metadata
+      }
     });
     
     // Record performance impact if available
     if (monitoringService) {
-      await monitoringService.recordPerformanceMetric({
+      await monitoringService.recordPerformanceMetrics('error_handling', {
         operation: error.operation,
         duration: 0, // Error occurred, no successful duration
         success: false,
@@ -417,16 +428,20 @@ export class ErrorHandlerService {
     this.alertCooldowns.set(alertKey, now);
     
     // Log alert (in production, this would integrate with alerting systems)
-    structuredLogger.logError('ALERT: Critical error detected', {
-      errorCode: error.errorCode,
-      category: error.category,
-      severity: error.severity,
-      component: error.component,
-      operation: error.operation,
-      message: error.message,
-      sessionId: error.sessionId,
-      timestamp: error.timestamp.toISOString(),
-      alertKey
+    structuredLogger.error('ALERT: Critical error detected', {
+      timestamp: new Date(),
+      metadata: {
+        errorType: error.category,
+        component: error.component,
+        operation: error.operation,
+        errorCode: error.errorCode,
+        category: error.category,
+        severity: error.severity,
+        message: error.message,
+        sessionId: error.sessionId,
+        errorTimestamp: error.timestamp.toISOString(),
+        alertKey
+      }
     });
     
     // TODO: Integrate with external alerting systems (PagerDuty, Slack, etc.)

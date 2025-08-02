@@ -27,13 +27,13 @@ class ContextManagerService {
     const operationId = `get_full_context_${Date.now()}`;
 
     try {
-      structuredLogger.logSystemEvent({
+      structuredLogger.info('Context manager operation', {
         timestamp: new Date(),
         component: 'ContextManager',
         operation: 'get_full_context_start',
         status: 'started',
         metadata: { operationId, sessionKey }
-      });
+      });</
 
       // Get session
       const session = await monitoredDb.getSession(sessionKey);
@@ -46,7 +46,7 @@ class ContextManagerService {
           duration,
           success: false,
           metadata: { sessionKey, reason: 'session_not_found' }
-        });
+        });</
 
         return null;
       }
@@ -73,10 +73,10 @@ class ContextManagerService {
           contextEntries: contextHistory.length,
           contextSizeBytes: contextSize
         }
-      });
+      });</
 
       // Log performance metrics
-      structuredLogger.logPerformanceMetric({
+      structuredLogger.info('Context manager operation', {
         timestamp: new Date(),
         sessionId: session.id,
         metricName: 'context_retrieval_duration',
@@ -85,9 +85,9 @@ class ContextManagerService {
         unit: 'milliseconds',
         tags: { sessionKey, contextEntries: contextHistory.length.toString() },
         metadata: { performanceBreakdown: timer.getAllCheckpointDurations() }
-      });
+      });</
 
-      structuredLogger.logSystemEvent({
+      structuredLogger.info('Context manager operation', {
         timestamp: new Date(),
         component: 'ContextManager',
         operation: 'get_full_context_complete',
@@ -99,7 +99,7 @@ class ContextManagerService {
           contextEntries: contextHistory.length,
           contextSizeBytes: contextSize
         }
-      });
+      });</
 
       return {
         session,
@@ -115,16 +115,16 @@ class ContextManagerService {
         duration,
         success: false,
         metadata: { sessionKey, error: (error as Error).message }
-      });
+      });</
 
       // Log error
-      structuredLogger.logError(error as Error, {
+      structuredLogger.error('Context manager error', {
         timestamp: new Date(),
         errorType: 'ServiceError',
         component: 'ContextManager',
         operation: 'get_full_context',
         additionalInfo: { operationId, sessionKey, durationMs: duration }
-      });
+      });</
 
       throw error;
     }
@@ -135,13 +135,13 @@ class ContextManagerService {
     const operationId = `create_handoff_summary_${Date.now()}`;
 
     try {
-      structuredLogger.logSystemEvent({
+      structuredLogger.info('Context manager operation', {
         timestamp: new Date(),
         component: 'ContextManager',
         operation: 'create_handoff_summary_start',
         status: 'started',
         metadata: { operationId, sessionKey }
-      });
+      });</
 
       const session = await monitoredDb.getSession(sessionKey);
       if (!session) {
@@ -180,10 +180,10 @@ class ContextManagerService {
           fileCount,
           toolCallCount
         }
-      });
+      });</
 
       // Log performance metric
-      structuredLogger.logPerformanceMetric({
+      structuredLogger.info('Context manager operation', {
         timestamp: new Date(),
         sessionId: session.id,
         metricName: 'handoff_summary_generation_duration',
@@ -192,9 +192,9 @@ class ContextManagerService {
         unit: 'milliseconds',
         tags: { sessionKey, contextEntries: contextHistory.length.toString() },
         metadata: { performanceBreakdown: timer.getAllCheckpointDurations() }
-      });
+      });</
 
-      structuredLogger.logSystemEvent({
+      structuredLogger.info('Context manager operation', {
         timestamp: new Date(),
         component: 'ContextManager',
         operation: 'create_handoff_summary_complete',
@@ -206,7 +206,7 @@ class ContextManagerService {
           summaryLength,
           contextEntries: contextHistory.length
         }
-      });
+      });</
 
       return {
         sessionKey,
@@ -227,16 +227,16 @@ class ContextManagerService {
         duration,
         success: false,
         metadata: { sessionKey, error: (error as Error).message }
-      });
+      });</
 
       // Log error
-      structuredLogger.logError(error as Error, {
+      structuredLogger.error('Context manager error', {
         timestamp: new Date(),
         errorType: 'ServiceError',
         component: 'ContextManager',
         operation: 'create_handoff_summary',
         additionalInfo: { operationId, sessionKey, durationMs: duration }
-      });
+      });</
 
       throw error;
     }
@@ -251,7 +251,7 @@ class ContextManagerService {
       if (entry.metadata.action) {
         keyPoints.push(`System: ${entry.metadata.action}`);
       }
-    });
+    });</
 
     // Extract important messages (simplified logic)
     const messageEntries = contextHistory.filter(c => c.contextType === 'message');
@@ -306,7 +306,7 @@ class ContextManagerService {
       if (entry.metadata.user) {
         participants.add(`user:${entry.metadata.user}`);
       }
-    });
+    });</
 
     return Array.from(participants);
   }

@@ -232,22 +232,27 @@ export class ConfigurationManager extends EventEmitter implements IConfiguration
       // Update hash for hot reload
       this.lastConfigHash = this.hashConfiguration(this.currentConfig);
       
-      structuredLogger.logSystemEvent({
-        timestamp: new Date(),
+    structuredLogger.info('Configuration loaded successfully', {
+      timestamp: new Date(),
+      metadata: {
         component: 'ConfigurationManager',
         operation: 'loadConfiguration',
         status: 'completed',
-        metadata: { version: this.currentConfig.version }
-      });
+        version: this.currentConfig.version
+      }
+    });
       
       return this.currentConfig;
     } catch (error) {
-      structuredLogger.logError(error as Error, {
-        timestamp: new Date(),
+    structuredLogger.error('Failed to load configuration', {
+      timestamp: new Date(),
+      metadata: {
         errorType: 'SystemError',
         component: 'ConfigurationManager',
-        operation: 'loadConfiguration'
-      });
+        operation: 'loadConfiguration',
+        errorMessage: (error as Error).message
+      }
+    });
       
       this.emit('configError', error);
       
@@ -292,22 +297,27 @@ export class ConfigurationManager extends EventEmitter implements IConfiguration
       // Emit change event
       this.emit('configChanged', validatedConfig);
       
-      structuredLogger.logSystemEvent({
-        timestamp: new Date(),
+    structuredLogger.info('Configuration saved successfully', {
+      timestamp: new Date(),
+      metadata: {
         component: 'ConfigurationManager',
         operation: 'saveConfiguration',
         status: 'completed',
-        metadata: { version: validatedConfig.version }
-      });
+        version: validatedConfig.version
+      }
+    });
       
       return validatedConfig;
     } catch (error) {
-      structuredLogger.logError(error as Error, {
-        timestamp: new Date(),
+    structuredLogger.error('Failed to save configuration', {
+      timestamp: new Date(),
+      metadata: {
         errorType: 'SystemError',
         component: 'ConfigurationManager',
-        operation: 'saveConfiguration'
-      });
+        operation: 'saveConfiguration',
+        errorMessage: (error as Error).message
+      }
+    });
       
       this.emit('configError', error);
       throw error;
@@ -323,13 +333,15 @@ export class ConfigurationManager extends EventEmitter implements IConfiguration
       
       if (!result.success) {
         const validationError = new Error('Configuration validation failed');
-        structuredLogger.logError(validationError, {
-          timestamp: new Date(),
-          errorType: 'ValidationError',
-          component: 'ConfigurationManager',
-          operation: 'validateConfiguration',
-          metadata: { errors: result.error.flatten() }
-        });
+    structuredLogger.error('Configuration validation failed', {
+      timestamp: new Date(),
+      metadata: {
+        errorType: 'ValidationError',
+        component: 'ConfigurationManager',
+        operation: 'validateConfiguration',
+        errors: result.error.flatten()
+      }
+    });
         
         this.emit('configValidationError', result.error.flatten());
         throw validationError;
@@ -338,12 +350,15 @@ export class ConfigurationManager extends EventEmitter implements IConfiguration
       return result.data;
     } catch (error) {
       // If validation fails completely, return defaults
-      structuredLogger.logError(error as Error, {
-        timestamp: new Date(),
+    structuredLogger.error('Configuration validation error', {
+      timestamp: new Date(),
+      metadata: {
         errorType: 'ValidationError',
         component: 'ConfigurationManager',
-        operation: 'validateConfiguration'
-      });
+        operation: 'validateConfiguration',
+        errorMessage: (error as Error).message
+      }
+    });
       
       return this.getDefaultConfiguration();
     }
@@ -371,11 +386,13 @@ export class ConfigurationManager extends EventEmitter implements IConfiguration
       30000 // Check every 30 seconds
     );
     
-    structuredLogger.logSystemEvent({
+    structuredLogger.info('Hot reload enabled', {
       timestamp: new Date(),
-      component: 'ConfigurationManager',
-      operation: 'enableHotReload',
-      status: 'completed'
+      metadata: {
+        component: 'ConfigurationManager',
+        operation: 'enableHotReload',
+        status: 'completed'
+      }
     });
   }
 
@@ -393,11 +410,13 @@ export class ConfigurationManager extends EventEmitter implements IConfiguration
       this.hotReloadInterval = undefined;
     }
     
-    structuredLogger.logSystemEvent({
+    structuredLogger.info('Hot reload disabled', {
       timestamp: new Date(),
-      component: 'ConfigurationManager',
-      operation: 'disableHotReload',
-      status: 'completed'
+      metadata: {
+        component: 'ConfigurationManager',
+        operation: 'disableHotReload',
+        status: 'completed'
+      }
     });
   }
 
@@ -500,22 +519,28 @@ export class ConfigurationManager extends EventEmitter implements IConfiguration
         [backupId, backupPath, this.currentConfig.version, new Date()]
       );
       
-      structuredLogger.logSystemEvent({
-        timestamp: new Date(),
+    structuredLogger.info('Configuration backup created', {
+      timestamp: new Date(),
+      metadata: {
         component: 'ConfigurationManager',
         operation: 'createBackup',
         status: 'completed',
-        metadata: { backupId, backupPath }
-      });
+        backupId,
+        backupPath
+      }
+    });
       
       return backupId;
     } catch (error) {
-      structuredLogger.logError(error as Error, {
-        timestamp: new Date(),
+    structuredLogger.error('Failed to create configuration backup', {
+      timestamp: new Date(),
+      metadata: {
         errorType: 'SystemError',
         component: 'ConfigurationManager',
-        operation: 'createBackup'
-      });
+        operation: 'createBackup',
+        errorMessage: (error as Error).message
+      }
+    });
       throw error;
     }
   }
@@ -546,22 +571,28 @@ export class ConfigurationManager extends EventEmitter implements IConfiguration
       // Log restoration
       await this.logConfigurationChange(restoredConfig, 'backup-restore');
       
-      structuredLogger.logSystemEvent({
-        timestamp: new Date(),
+    structuredLogger.info('Configuration restored from backup', {
+      timestamp: new Date(),
+      metadata: {
         component: 'ConfigurationManager',
         operation: 'restoreFromBackup',
         status: 'completed',
-        metadata: { backupId, version: restoredConfig.version }
-      });
+        backupId,
+        version: restoredConfig.version
+      }
+    });
       
       return restoredConfig;
     } catch (error) {
-      structuredLogger.logError(error as Error, {
-        timestamp: new Date(),
+    structuredLogger.error('Failed to restore configuration from backup', {
+      timestamp: new Date(),
+      metadata: {
         errorType: 'SystemError',
         component: 'ConfigurationManager',
-        operation: 'restoreFromBackup'
-      });
+        operation: 'restoreFromBackup',
+        errorMessage: (error as Error).message
+      }
+    });
       throw error;
     }
   }
@@ -581,12 +612,15 @@ export class ConfigurationManager extends EventEmitter implements IConfiguration
         version: row.config_version
       }));
     } catch (error) {
-      structuredLogger.logError(error as Error, {
-        timestamp: new Date(),
+    structuredLogger.error('Failed to list configuration backups', {
+      timestamp: new Date(),
+      metadata: {
         errorType: 'SystemError',
         component: 'ConfigurationManager',
-        operation: 'listBackups'
-      });
+        operation: 'listBackups',
+        errorMessage: (error as Error).message
+      }
+    });
       return [];
     }
   }
@@ -622,12 +656,15 @@ export class ConfigurationManager extends EventEmitter implements IConfiguration
       
       return result.rows[0].config_data;
     } catch (error) {
-      structuredLogger.logError(error as Error, {
-        timestamp: new Date(),
+    structuredLogger.error('Failed to load configuration from database', {
+      timestamp: new Date(),
+      metadata: {
         errorType: 'SystemError',
         component: 'ConfigurationManager',
-        operation: 'loadFromDatabase'
-      });
+        operation: 'loadFromDatabase',
+        errorMessage: (error as Error).message
+      }
+    });
       return null;
     }
   }
@@ -710,12 +747,15 @@ export class ConfigurationManager extends EventEmitter implements IConfiguration
         [config.version, changedBy, new Date(), JSON.stringify(config)]
       );
     } catch (error) {
-      structuredLogger.logError(error as Error, {
-        timestamp: new Date(),
+    structuredLogger.error('Failed to log configuration change', {
+      timestamp: new Date(),
+      metadata: {
         errorType: 'SystemError',
         component: 'ConfigurationManager',
-        operation: 'logConfigurationChange'
-      });
+        operation: 'logConfigurationChange',
+        errorMessage: (error as Error).message
+      }
+    });
     }
   }
 

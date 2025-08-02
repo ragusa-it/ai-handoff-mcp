@@ -141,13 +141,10 @@ export class ResilientDatabaseManager {
         
         this.isInitialized = true;
         
-        structuredLogger.info('Resilient database manager initialized successfully', {
-          timestamp: new Date(),
-          metadata: {
-            postgresConnected: this.pgHealth.connected,
-            redisConnected: this.redisHealth.connected,
-            backupInstances: this.redisBackupClients.length
-          }
+        structuredLogger.logInfo('Resilient database manager initialized successfully', {
+          pgPoolSize: this.pgPool.totalCount,
+          redisConnected: this.redisClient.isReady,
+          backupRedisInstances: this.redisBackupClients.length
         });
       },
       {
@@ -184,13 +181,9 @@ export class ResilientDatabaseManager {
       this.pgHealth.connected = true;
       this.pgHealth.consecutiveFailures = 0;
       
-      structuredLogger.info('PostgreSQL initialized successfully', {
-        timestamp: new Date(),
-        metadata: {
-          host: this.pgConfig.host,
-          port: this.pgConfig.port,
-          database: this.pgConfig.database
-        }
+      structuredLogger.logInfo('PostgreSQL initialized successfully', {
+        maxConnections: this.pgPool.options.max,
+        minConnections: this.pgPool.options.min
       });
     } catch (error) {
       this.pgHealth.connected = false;
@@ -210,22 +203,16 @@ export class ResilientDatabaseManager {
       this.redisHealth.connected = true;
       this.redisHealth.consecutiveFailures = 0;
       
-      structuredLogger.info('Redis initialized successfully');
+      structuredLogger.logInfo('Redis initialized successfully');
       
       // Initialize backup Redis instances
       for (let i = 0; i < this.redisBackupClients.length; i++) {
         try {
           await this.redisBackupClients[i].connect();
-          structuredLogger.info(`Redis backup instance ${i + 1} connected`);
+          structuredLogger.logInfo(`Redis backup instance ${i + 1} connected`);
         } catch (error) {
           structuredLogger.logWarning(`Failed to connect to Redis backup instance ${i + 1}`, {
-            timestamp: new Date(),
-            warningType: 'Resource',
-            component: 'ResilientDatabaseManager',
-            metadata: {
-              backupIndex: i + 1,
-              error: error instanceof Error ? error.message : String(error)
-            }
+            error: error instanceof Error ? error.message : String(error)
           });
         }
       }
@@ -243,21 +230,14 @@ export class ResilientDatabaseManager {
     this.pgPool.on('connect', (client) => {
       this.pgHealth.connected = true;
       this.pgHealth.consecutiveFailures = 0;
-      structuredLogger.info('PostgreSQL client connected');
+      structuredLogger.logInfo('PostgreSQL client connected');
     });
     
     this.pgPool.on('error', (error, client) => {
       this.pgHealth.consecutiveFailures++;
-      const errorObj = error instanceof Error ? error : new Error(String(error));
-      structuredLogger.logError(errorObj, {
-        timestamp: new Date(),
-        errorType: 'DatabaseError',
-        component: 'ResilientDatabaseManager',
-        operation: 'pool_error',
-        additionalInfo: {
-          error: errorObj.message,
-          consecutiveFailures: this.pgHealth.consecutiveFailures
-        }
+      structuredLogger.logError('PostgreSQL pool error', {
+        error: error.message,
+        consecutiveFailures: this.pgHealth.consecutiveFailures
       });
       
       // Attempt recovery if multiple consecutive failures
@@ -267,7 +247,7 @@ export class ResilientDatabaseManager {
     });
     
     this.pgPool.on('remove', (client) => {
-      structuredLogger.info('PostgreSQL client removed from pool');
+      structuredLogger.logInfo('PostgreSQL client removed from pool');
     });
   }
   
@@ -278,35 +258,24 @@ export class ResilientDatabaseManager {
     this.redisClient.on('connect', () => {
       this.redisHealth.connected = true;
       this.redisHealth.consecutiveFailures = 0;
-      structuredLogger.info('Redis client connected');
+      structuredLogger.logInfo('Redis client connected');
     });
     
     this.redisClient.on('error', (error) => {
       this.redisHealth.consecutiveFailures++;
-      const errorObj = error instanceof Error ? error : new Error(String(error));
-      structuredLogger.logError(errorObj, {
-        timestamp: new Date(),
-        errorType: 'RedisError',
-        component: 'ResilientDatabaseManager',
-        operation: 'client_error',
-        additionalInfo: {
-          error: errorObj.message,
-          consecutiveFailures: this.redisHealth.consecutiveFailures
-        }
+      structuredLogger.logError('Redis client error', {
+        error: error.message,
+        consecutiveFailures: this.redisHealth.consecutiveFailures
       });
     });
     
     this.redisClient.on('reconnecting', () => {
-      structuredLogger.info('Redis client reconnecting');
+      structuredLogger.logInfo('Redis client reconnecting');
     });
     
     this.redisClient.on('end', () => {
       this.redisHealth.connected = false;
-      structuredLogger.logWarning('Redis client connection ended', {
-        timestamp: new Date(),
-        warningType: 'Resource',
-        component: 'ResilientDatabaseManager'
-      });
+      structuredLogger.logWarning('Redis client connection ended');
     });
   }
   
@@ -331,14 +300,9 @@ export class ResilientDatabaseManager {
       
       backupClient.on('error', (error) => {
         structuredLogger.logWarning('Redis backup instance error', {
-          timestamp: new Date(),
-          warningType: 'Resource',
-          component: 'ResilientDatabaseManager',
-          metadata: {
-            host: cluster.host,
-            port: cluster.port,
-            error: error.message
-          }
+          host: cluster.host,
+          port: cluster.port,
+          error: error.message
         });
       });
     }
@@ -421,22 +385,16 @@ export class ResilientDatabaseManager {
       if (!this.pgHealth.connected) {
         this.pgHealth.connected = true;
         this.pgHealth.consecutiveFailures = 0;
-        structuredLogger.info('PostgreSQL health recovered');
+        structuredLogger.logInfo('PostgreSQL health recovered');
       }
     } catch (error) {
       this.pgHealth.connected = false;
       this.pgHealth.consecutiveFailures++;
       this.pgHealth.lastHealthCheck = new Date();
       
-      const errorObj = error instanceof Error ? error : new Error(String(error));
-      structuredLogger.logError(errorObj, {
-        timestamp: new Date(),
-        errorType: 'DatabaseError',
-        component: 'ResilientDatabaseManager',
-        operation: 'healthCheck',
-        additionalInfo: {
-          consecutiveFailures: this.pgHealth.consecutiveFailures
-        }
+      structuredLogger.logError('PostgreSQL health check failed', {
+        error: error instanceof Error ? error.message : String(error),
+        consecutiveFailures: this.pgHealth.consecutiveFailures
       });
     }
     
@@ -449,22 +407,16 @@ export class ResilientDatabaseManager {
       if (!this.redisHealth.connected) {
         this.redisHealth.connected = true;
         this.redisHealth.consecutiveFailures = 0;
-        structuredLogger.info('Redis health recovered');
+        structuredLogger.logInfo('Redis health recovered');
       }
     } catch (error) {
       this.redisHealth.connected = false;
       this.redisHealth.consecutiveFailures++;
       this.redisHealth.lastHealthCheck = new Date();
       
-      const errorObj = error instanceof Error ? error : new Error(String(error));
-      structuredLogger.logError(errorObj, {
-        timestamp: new Date(),
-        errorType: 'RedisError',
-        component: 'ResilientDatabaseManager',
-        operation: 'healthCheck',
-        additionalInfo: {
-          consecutiveFailures: this.redisHealth.consecutiveFailures
-        }
+      structuredLogger.logError('Redis health check failed', {
+        error: error instanceof Error ? error.message : String(error),
+        consecutiveFailures: this.redisHealth.consecutiveFailures
       });
       
       // Try backup Redis instances
@@ -476,7 +428,7 @@ export class ResilientDatabaseManager {
    * Attempt PostgreSQL recovery
    */
   private async attemptPostgreSQLRecovery(): Promise<void> {
-    structuredLogger.info('Attempting PostgreSQL recovery');
+    structuredLogger.logInfo('Attempting PostgreSQL recovery');
     
     try {
       // End the current pool and create a new one
@@ -500,17 +452,10 @@ export class ResilientDatabaseManager {
       this.pgHealth.connected = true;
       this.pgHealth.consecutiveFailures = 0;
       
-      structuredLogger.info('PostgreSQL recovery successful');
+      structuredLogger.logInfo('PostgreSQL recovery successful');
     } catch (error) {
-      const errorObj = error instanceof Error ? error : new Error(String(error));
-      structuredLogger.logError(errorObj, {
-        timestamp: new Date(),
-        errorType: 'DatabaseError',
-        component: 'ResilientDatabaseManager',
-        operation: 'recovery',
-        additionalInfo: {
-          error: errorObj.message
-        }
+      structuredLogger.logError('PostgreSQL recovery failed', {
+        error: error instanceof Error ? error.message : String(error)
       });
     }
   }
@@ -533,34 +478,19 @@ export class ResilientDatabaseManager {
         this.redisHealth.connected = true;
         this.redisHealth.consecutiveFailures = 0;
         
-        structuredLogger.info('Redis failover successful', {
-          timestamp: new Date(),
-          metadata: {
-            newPrimaryIndex: i
-          }
+        structuredLogger.logInfo('Redis failover successful', {
+          newPrimaryIndex: i
         });
         
         return;
       } catch (error) {
         structuredLogger.logWarning(`Redis backup instance ${i} also unhealthy`, {
-          timestamp: new Date(),
-          warningType: 'Resource',
-          component: 'ResilientDatabaseManager',
-          metadata: {
-            backupIndex: i,
-            error: error instanceof Error ? error.message : String(error)
-          }
+          error: error instanceof Error ? error.message : String(error)
         });
       }
     }
     
-    const error = new Error('All Redis instances are unhealthy');
-    structuredLogger.logError(error, {
-      timestamp: new Date(),
-      errorType: 'RedisError',
-      component: 'ResilientDatabaseManager',
-      operation: 'redis_failover'
-    });
+    structuredLogger.logError('All Redis instances are unhealthy');
   }
   
   /**
@@ -670,7 +600,7 @@ export class ResilientDatabaseManager {
       await client.query(createMonitoringViews);
       
       await client.query('COMMIT');
-      structuredLogger.info('Database schema initialized successfully');
+      structuredLogger.logInfo('Database schema initialized successfully');
     } catch (error) {
       await client.query('ROLLBACK');
       throw error;
@@ -700,17 +630,10 @@ export class ResilientDatabaseManager {
       }
       
       this.isInitialized = false;
-      structuredLogger.info('Resilient database manager shut down gracefully');
+      structuredLogger.logInfo('Resilient database manager shut down gracefully');
     } catch (error) {
-      const errorObj = error instanceof Error ? error : new Error(String(error));
-      structuredLogger.logError(errorObj, {
-        timestamp: new Date(),
-        errorType: 'SystemError',
-        component: 'ResilientDatabaseManager',
-        operation: 'shutdown',
-        additionalInfo: {
-          error: errorObj.message
-        }
+      structuredLogger.logError('Error during database shutdown', {
+        error: error instanceof Error ? error.message : String(error)
       });
     }
   }

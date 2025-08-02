@@ -85,10 +85,13 @@ export class GracefulDegradationService {
     // Start health checking
     this.startHealthCheck(config.service);
     
-    structuredLogger.logInfo('Service registered for graceful degradation', {
-      service: config.service,
-      priority: config.priority,
-      fallbackEnabled: serviceHealth.fallbackEnabled
+    structuredLogger.info('Service registered for graceful degradation', {
+      timestamp: new Date(),
+      metadata: {
+        service: config.service,
+        priority: config.priority,
+        fallbackEnabled: serviceHealth.fallbackEnabled
+      }
     });
   }
   
@@ -200,14 +203,17 @@ export class GracefulDegradationService {
     serviceName: string,
     fallbackValue?: T
   ): DegradationResult<T> {
-    structuredLogger.logInfo('Service skipped due to degradation mode', {
-      service: serviceName,
-      degradationMode: this.currentMode
+    structuredLogger.info('Service skipped due to degradation mode', {
+      timestamp: new Date(),
+      metadata: {
+        service: serviceName,
+        degradationMode: this.currentMode
+      }
     });
     
     return {
       success: true,
-      result: fallbackValue,
+      result: fallbackValue as T,
       degradationMode: this.currentMode,
       serviceHealth: this.getServiceHealthSnapshot(),
       fallbackUsed: true
@@ -227,10 +233,15 @@ export class GracefulDegradationService {
     try {
       const result = await fallbackFunction();
       
-      structuredLogger.logWarning('Service fallback executed successfully', {
-        service: serviceName,
-        degradationMode: this.currentMode
-      });
+      structuredLogger.warn('Service fallback executed successfully', {
+        timestamp: new Date(),
+        warningType: 'Performance',
+        component: 'GracefulDegradation',
+        metadata: {
+          service: serviceName,
+          degradationMode: this.currentMode
+        }
+      } as any);
       
       return {
         success: true,
@@ -250,9 +261,12 @@ export class GracefulDegradationService {
         timestamp: new Date()
       });
       
-      structuredLogger.logError('Service fallback failed', {
-        service: serviceName,
-        error: enhancedError.message
+      structuredLogger.error('Service fallback failed', {
+        timestamp: new Date(),
+        metadata: {
+          service: serviceName,
+          error: enhancedError.message
+        }
       });
       
       return {
@@ -281,15 +295,20 @@ export class GracefulDegradationService {
       timestamp: new Date()
     });
     
-    structuredLogger.logWarning('Non-critical service failed, continuing with degraded functionality', {
-      service: serviceName,
-      error: enhancedError.message,
-      degradationMode: this.currentMode
-    });
+    structuredLogger.warn('Non-critical service failed, continuing with degraded functionality', {
+      timestamp: new Date(),
+      warningType: 'Performance',
+      component: 'GracefulDegradation',
+      metadata: {
+        service: serviceName,
+        error: enhancedError.message,
+        degradationMode: this.currentMode
+      }
+    } as any);
     
     return {
       success: true, // System continues to operate
-      result: fallbackValue,
+      result: fallbackValue as T,
       degradationMode: this.currentMode,
       serviceHealth: this.getServiceHealthSnapshot(),
       fallbackUsed: true,
@@ -317,9 +336,12 @@ export class GracefulDegradationService {
       if (!service.healthy) {
         service.healthy = true;
         service.fallbackActive = false;
-        structuredLogger.logInfo('Service recovered', {
-          service: serviceName,
-          responseTime
+        structuredLogger.info('Service recovered', {
+          timestamp: new Date(),
+          metadata: {
+            service: serviceName,
+            responseTime
+          }
         });
       }
     } else {
@@ -330,11 +352,16 @@ export class GracefulDegradationService {
       
       if (service.healthy && service.consecutiveFailures >= config.failureThreshold) {
         service.healthy = false;
-        structuredLogger.logWarning('Service marked as unhealthy', {
-          service: serviceName,
-          consecutiveFailures: service.consecutiveFailures,
-          threshold: config.failureThreshold
-        });
+        structuredLogger.warn('Service marked as unhealthy', {
+          timestamp: new Date(),
+          warningType: 'Performance',
+          component: 'GracefulDegradation',
+          metadata: {
+            service: serviceName,
+            consecutiveFailures: service.consecutiveFailures,
+            threshold: config.failureThreshold
+          }
+        } as any);
         
         // Check if we need to update degradation mode
         this.evaluateDegradationMode();
@@ -391,15 +418,20 @@ export class GracefulDegradationService {
       const oldMode = this.currentMode;
       this.currentMode = newMode;
       
-      structuredLogger.logWarning('Degradation mode changed', {
-        oldMode,
-        newMode,
-        unhealthyServices: unhealthyServices.map(s => ({
-          name: s.name,
-          priority: s.priority,
-          consecutiveFailures: s.consecutiveFailures
-        }))
-      });
+      structuredLogger.warn('Degradation mode changed', {
+        timestamp: new Date(),
+        warningType: 'Performance',
+        component: 'GracefulDegradation',
+        metadata: {
+          oldMode,
+          newMode,
+          unhealthyServices: unhealthyServices.map(s => ({
+            name: s.name,
+            priority: s.priority,
+            consecutiveFailures: s.consecutiveFailures
+          }))
+        }
+      } as any);
     }
   }
   
@@ -430,10 +462,15 @@ export class GracefulDegradationService {
     const oldMode = this.currentMode;
     this.currentMode = mode;
     
-    structuredLogger.logWarning('Degradation mode manually changed', {
-      oldMode,
-      newMode: mode
-    });
+    structuredLogger.warn('Degradation mode manually changed', {
+      timestamp: new Date(),
+      warningType: 'Performance',
+      component: 'GracefulDegradation',
+      metadata: {
+        oldMode,
+        newMode: mode
+      }
+    } as any);
   }
   
   /**
@@ -459,7 +496,10 @@ export class GracefulDegradationService {
       this.currentMode = DegradationMode.FULL_SERVICE;
     }
     
-    structuredLogger.logInfo('Service health reset', { serviceName: serviceName || 'all' });
+    structuredLogger.info('Service health reset', {
+      timestamp: new Date(),
+      metadata: { serviceName: serviceName || 'all' }
+    });
   }
   
   /**
@@ -471,7 +511,9 @@ export class GracefulDegradationService {
     }
     this.healthCheckIntervals.clear();
     
-    structuredLogger.logInfo('Graceful degradation service shut down');
+    structuredLogger.info('Graceful degradation service shut down', {
+      timestamp: new Date()
+    });
   }
   
   /**

@@ -60,7 +60,7 @@ class SessionManagerService {
       logRetentionDays: 30,
       metricsRetentionDays: 90,
       dormantThresholdHours: 6
-    });
+    } as any);
 
     this.retentionPolicies.set('short', {
       name: 'short',
@@ -69,7 +69,7 @@ class SessionManagerService {
       logRetentionDays: 3,
       metricsRetentionDays: 7,
       dormantThresholdHours: 1
-    });
+    } as any);
   }
 
   /**
@@ -80,13 +80,13 @@ class SessionManagerService {
     const operationId = `schedule_expiration_${Date.now()}`;
 
     try {
-      structuredLogger.logSystemEvent({
+      structuredLogger.info('Session manager operation', {
         timestamp: new Date(),
         component: 'SessionManager',
         operation: 'schedule_expiration_start',
         status: 'started',
         metadata: { operationId, sessionId }
-      });
+      } as any);
 
       const session = await this.getSessionById(sessionId);
       if (!session) {
@@ -112,7 +112,7 @@ class SessionManagerService {
         expires_at: expiresAt,
         retention_policy: policy.name,
         ttl_hours: policy.activeSessionTtl
-      });
+      } as any);
       timer.checkpoint('lifecycle_logged');
 
       const duration = timer.getElapsed();
@@ -127,9 +127,9 @@ class SessionManagerService {
           retentionPolicy: policy.name,
           ttlHours: policy.activeSessionTtl
         }
-      });
+      } as any);
 
-      structuredLogger.logSystemEvent({
+      structuredLogger.info('Session manager operation', {
         timestamp: new Date(),
         component: 'SessionManager',
         operation: 'schedule_expiration_complete',
@@ -141,7 +141,7 @@ class SessionManagerService {
           expiresAt: expiresAt.toISOString(),
           retentionPolicy: policy.name
         }
-      });
+      } as any);
 
       console.log(`Session ${sessionId} scheduled for expiration at ${expiresAt}`);
     } catch (error) {
@@ -153,16 +153,16 @@ class SessionManagerService {
         duration,
         success: false,
         metadata: { sessionId, error: (error as Error).message }
-      });
+      } as any);
 
       // Log error
-      structuredLogger.logError(error as Error, {
+      structuredLogger.error('Session manager error', {
         timestamp: new Date(),
         errorType: 'ServiceError',
         component: 'SessionManager',
         operation: 'schedule_expiration',
         additionalInfo: { operationId, sessionId, durationMs: duration }
-      });
+      } as any);
 
       throw error;
     }
@@ -201,7 +201,7 @@ class SessionManagerService {
         previous_status: session.status,
         expired_at: new Date(),
         retention_policy: session.retentionPolicy
-      });
+      } as any);
 
       console.log(`Session ${sessionId} expired successfully`);
     } catch (error) {
@@ -258,7 +258,7 @@ class SessionManagerService {
         archived_at: archivedAt,
         previous_status: session.status,
         retention_policy: session.retentionPolicy
-      });
+      } as any);
 
       console.log(`Session ${sessionId} archived successfully`);
     } catch (error) {
@@ -370,7 +370,7 @@ class SessionManagerService {
       await this.logLifecycleEvent(sessionId, 'dormant', {
         marked_dormant_at: new Date(),
         last_activity: session.lastActivityAt
-      });
+      } as any);
 
       console.log(`Session ${sessionId} marked as dormant`);
     } catch (error) {
@@ -415,7 +415,7 @@ class SessionManagerService {
       await this.logLifecycleEvent(sessionId, 'reactivated', {
         reactivated_at: new Date(),
         was_dormant_since: session.lastActivityAt
-      });
+      } as any);
 
       console.log(`Session ${sessionId} reactivated successfully`);
     } catch (error) {
