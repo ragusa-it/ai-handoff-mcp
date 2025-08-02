@@ -40,7 +40,7 @@ npm start
 npm run dev
 ```
 
-Minimal Client Example registerSession, updateContext, requestHandoff
+Minimal Client Example register_session, update_context, request_handoff
 ```ts
 import { Client } from '@modelcontextprotocol/sdk/client/index.js';
 import { StdioClientTransport } from '@modelcontextprotocol/sdk/client/stdio.js';
@@ -59,7 +59,7 @@ await client.connect(transport);
 
 // Register session
 const reg = await client.callTool({
-  name: 'registerSession',
+  name: 'register_session',
   arguments: {
     sessionKey: 'session-' + Date.now(),
     agentFrom: 'example-client',
@@ -71,7 +71,7 @@ const sessionKey = regPayload.session.sessionKey;
 
 // Update context
 await client.callTool({
-  name: 'updateContext',
+  name: 'update_context',
   arguments: {
     sessionKey,
     contextType: 'message',
@@ -82,7 +82,7 @@ await client.callTool({
 
 // Request handoff
 const handoff = await client.callTool({
-  name: 'requestHandoff',
+  name: 'request_handoff',
   arguments: {
     sessionKey,
     targetAgent: 'downstream-assistant',
@@ -96,8 +96,18 @@ console.log('Handoff result:', handoff.content[0].text);
 Verify Resources
 ```ts
 // Example using MCP client's accessResource if available
-// Get session context summary
-// const summary = await client.accessResource({ uri: `handoff://summary/${sessionKey}` });
+
+// Health check
+// const health = await client.accessResource({ uri: 'handoff://health' });
+
+// List sessions
+// const sessions = await client.accessResource({ uri: 'handoff://sessions' });
+
+// Get session context
+// const context = await client.accessResource({ uri: `handoff://context/${sessionKey}` });
+
+// Metrics overview
+// const metrics = await client.accessResource({ uri: 'handoff://metrics' });
 ```
 
 Common Commands

@@ -33,8 +33,8 @@ sequenceDiagram
   DB-->>MCP: session active
   MCP-->>Client: session created
 
-  Client->>MCP: analyzeCodebase({ rootPath, patterns, depth })
-  MCP->>Analyzer: analyze({ rootPath, patterns, depth })
+  Client->>MCP: analyze_codebase({ sessionKey, filePaths, analysisType })
+  MCP->>Analyzer: analyze({ sessionKey, filePaths, analysisType })
   Analyzer->>Analyzer: scan files, compute metrics, extract symbols
   Analyzer-->>MCP: analysis summary + artifacts
   MCP->>DB: persist artifacts reference
@@ -43,6 +43,17 @@ sequenceDiagram
   Client->>MCP: updateContext with summary
   MCP-->>Client: context appended
 ```
+
+Parameters
+- sessionKey (required, string)
+- filePaths (required, array of strings)
+- analysisType (optional, enum: syntax, dependencies, structure, full)
+
+Analysis Types
+- syntax: Basic syntax checks and counts; highlights possible syntax issues and aggregates per-file stats.
+- dependencies: Extracts module/file dependency information and aggregates edges for a dependency list/graph.
+- structure: High-level structure overview (files, folders, symbols/classes/functions totals).
+- full: Combines syntax, dependencies, and structure into a single comprehensive result.
 
 Example: Running Analysis and Storing Findings
 ```ts
@@ -70,13 +81,11 @@ const session = JSON.parse(reg.content[0].text).session;
 
 // 2) Run codebase analysis (tool name may be exposed if enabled)
 const analysis = await client.callTool({
-  name: 'analyzeCodebase',
+  name: 'analyze_codebase',
   arguments: {
-    rootPath: '.',
-    patterns: ['src/**/*.ts'],
-    depth: 6,
-    includeMetrics: true,
-    includeSymbolIndex: true
+    sessionKey: session.sessionKey,
+    filePaths: ['src/services/codebaseAnalyzer.ts', 'src/mcp/tools/index.ts'],
+    analysisType: 'full'
   }
 });
 const analysisPayload = JSON.parse(analysis.content[0].text);
@@ -92,38 +101,25 @@ await client.callTool({
 });
 ```
 
-Expected Response Shapes
-- analyzeCodebase success
+Response Format
+- Success payload (generic shape)
 ```json
 {
   "success": true,
-  "files": 124,
-  "modules": 18,
-  "hotspots": ["src/services/contextManager.ts", "src/database/resilientDatabase.ts"],
-  "metrics": {
-    "avgFunctionLength": 14.2,
-    "maxDepth": 7,
-    "cyclomaticHotspots": 5
+  "message": "analysis completed",
+  "summary": "Scanned 2 files; 1 module; no critical issues.",
+  "findings": {
+    "files": { "count": 2, "list": ["src/server.ts", "src/services/sessionManager.ts"] },
+    "dependencies": { "totalEdges": 1, "list": [{"from": "src/server.ts", "to": "src/services/sessionManager.ts"}] },
+    "structure": { "modules": 1, "symbols": { "functions": 5, "classes": 1 } }
   },
-  "symbols": {
-    "functions": 312,
-    "classes": 27,
-    "exports": 156
-  },
-  "artifacts": [
-    { "type": "summary", "uri": "handoff://summary/session-..." },
-    { "type": "symbolIndex", "uri": "handoff://analysis/symbols/session-..." }
-  ],
   "timestamp": "2025-08-02T12:00:00.000Z"
 }
 ```
 
-- analyzeCodebase failure examples
+- Failure payload (example)
 ```json
-{ "success": false, "error": "Path not found", "errorCode": "VALIDATION_ERROR", "details": { "rootPath": "unknown/" } }
-```
-```json
-{ "success": false, "error": "Repository too large for configured limits", "errorCode": "RATE_LIMITED", "details": { "limit": "maxFiles=10000" } }
+{ "success": false, "message": "Path not found", "errorCode": "VALIDATION_ERROR", "details": { "filePaths": ["unknown/file.ts"] } }
 ```
 
 Operational Notes
@@ -138,9 +134,9 @@ Security Considerations
 - Avoid exposing raw source content unless necessary; prefer metadata and summaries.
 
 Troubleshooting
-- Empty results: verify patterns and depth; check logs for ignored paths.
-- Timeouts: increase operation timeout and/or reduce patterns; review metrics in ../performance.md.
-- Memory pressure: limit includeSymbolIndex; adjust worker concurrency.
+- Empty results: verify filePaths and sessionKey; check logs for ignored paths.
+- Timeouts: reduce file set or use narrower analysisType; review metrics in ../performance.md.
+- Memory pressure: limit filePaths per invocation.
 
 Related
 - Sessions: ./sessions.md

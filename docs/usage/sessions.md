@@ -12,7 +12,7 @@ const client = new Client({ name: 'docs-example', version: '1.0.0' }, { capabili
 await client.connect(transport);
 
 const res = await client.callTool({
-  name: 'registerSession',
+  name: 'register_session',
   arguments: {
     sessionKey: 'session-' + Date.now(),
     agentFrom: 'docs-example',
@@ -45,25 +45,25 @@ Expected Response
 
 Lifecycle States
 - active: session is active and accepts updates
-- dormant: session detected inactive past threshold, reactivates on new activity
-- expired: TTL exceeded; moved to archival flow
-- archived: retained read-only per retention policy
+- dormant: session marked dormant after inactivity threshold (flagged via isDormant=true)
+- expired: status transitioned to expired when TTL elapses
+- archived: session archived to cold storage; read-only access
 
 Lifecycle Diagram
 ```mermaid
 stateDiagram-v2
   [*] --> active
   active --> dormant: inactivity threshold
-  dormant --> active: new updateContext
-  active --> expired: TTL exceeded
+  dormant --> active: new updateContext / reactivation
+  active --> expired: TTL exceeded (schedule_expiration)
   dormant --> expired: TTL exceeded
-  expired --> archived: retention policy
+  expired --> archived: retention policy / archival
   archived --> [*]
 ```
 
 Operational Notes
 - Duplicate registration returns a failure with existing session metadata
-- Expiration is scheduled via Session Manager background workflows
+- Expiration is scheduled by the session manager and transitions status to "expired"
 - A system context entry is appended upon registration for auditability
 
 Related

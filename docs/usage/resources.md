@@ -1,74 +1,146 @@
 # Usage: Resources
 
-MCP resources provide read-only access to session data and derived artifacts using URIs under the handoff scheme.
+Resource Overview
+MCP resources expose read-only data over URIs using the handoff:// scheme. Clients retrieve resources via the MCP readResource capability and receive JSON payloads or text depending on the endpoint.
 
-Available Resources
-- handoff://sessions
-  - Description: List of active sessions
-  - MIME: application/json
-- handoff://context/{sessionKey}
-  - Description: Full context history for a session
-  - MIME: application/json
-- handoff://summary/{sessionKey}
-  - Description: Summarized context for a session
-  - MIME: application/json
-- handoff://agents/{agentId}/sessions
-  - Description: Sessions associated with a specific agent
-  - MIME: application/json
-
-Client Access Example
+Minimal client usage
 ```ts
-// Using an MCP client that supports accessResource
-const sessions = await client.accessResource({ uri: 'handoff://sessions' });
-// console.log('Active sessions:', sessions.contents[0].text);
-
-const sessionKey = 'session-1722600000000';
-const context = await client.accessResource({ uri: `handoff://context/${sessionKey}` });
-// console.log('Context history:', context.contents[0].text);
-
-const summary = await client.accessResource({ uri: `handoff://summary/${sessionKey}` });
-// console.log('Summary:', summary.contents[0].text);
-
-const agentSessions = await client.accessResource({ uri: 'handoff://agents/downstream-assistant/sessions' });
-// console.log('Agent sessions:', agentSessions.contents[0].text);
+// TypeScript example using an MCP client with readResource(uri: string)
+const res = await client.readResource('handoff://sessions');
+const json = JSON.parse(res.contents[0].text);
+console.log('Active sessions:', json.sessions?.length ?? 0);
 ```
 
-Response Shapes examples
+Session Resources
 - handoff://sessions
-```json
-{
-  "sessions": [
-    { "sessionKey": "session-1722600000000", "status": "active", "agentFrom": "example-client", "createdAt": "2025-08-02T12:00:00.000Z" }
-  ],
-  "total": 1
-}
-```
-
+  - Description: List active sessions
+  - Payload shape:
+    ```json
+    { "sessions": [ { "sessionKey": "string", "status": "active|ended", "agent_from": "string", "created_at": "ISO-8601" } ], "total": 0 }
+    ```
 - handoff://context/{sessionKey}
-```json
-{
-  "sessionKey": "session-1722600000000",
-  "entries": [
-    { "sequenceNumber": 1, "contextType": "system", "content": "Session registered", "createdAt": "2025-08-02T12:00:00.000Z" },
-    { "sequenceNumber": 2, "contextType": "message", "content": "Hello", "createdAt": "2025-08-02T12:01:00.000Z" }
-  ],
-  "hasMore": false
+  - Description: Full context history for a specific session
+  - Payload shape:
+    ```json
+    { "sessionKey": "string", "entries": [ { "sequence_number": 1, "context_type": "system|message|event", "content": "string|object", "created_at": "ISO-8601" } ], "has_more": false }
+    ```
+- handoff://sessions/lifecycle
+  - Description: Stream/monitor session lifecycle events (created, updated, ended)
+  - Payload shape (poll/read returns latest snapshot):
+    ```json
+    { "events": [ { "type": "created|updated|ended", "sessionKey": "string", "timestamp": "ISO-8601", "details": {}} ] }
+    ```
+
+System Resources
+- handoff://health
+  - Description: System health status (readiness/liveness, component checks)
+  - Payload shape:
+    ```json
+    { "status": "ok|degraded|error", "components": [ { "name": "string", "status": "ok|warn|error", "details": {} } ], "timestamp": "ISO-8601" }
+    ```
+- handoff://metrics
+  - Description: Prometheus metrics in text exposition format
+  - Payload: text/plain (Prometheus exposition)
+- handoff://jobs
+  - Description: Background jobs status overview
+  - Payload shape:
+    ```json
+    { "jobs": [ { "name": "string", "state": "idle|running|failed|completed", "last_run_at": "ISO-8601", "next_run_at": "ISO-8601", "runs": { "success": 0, "failed": 0 } } ] }
+    ```
+- handoff://jobs/{jobName}
+  - Description: Details for a specific job
+  - Payload shape:
+    ```json
+    { "name": "string", "state": "idle|running|failed|completed", "last_error": "string|null", "history": [ { "run_at": "ISO-8601", "status": "success|failed", "duration_ms": 0 } ] }
+    ```
+
+Analytics Resources
+- handoff://analytics/{type}
+  - Description: Analytics datasets (sessions, handoffs, context, performance, resources)
+  - Valid {type} values: "sessions", "handoffs", "context", "performance", "resources"
+  - Payload shape (generic):
+    ```json
+    { "type": "string", "range": { "from": "ISO-8601", "to": "ISO-8601" }, "data": [ { "metric": "string", "value": 0, "dimensions": {}} ] }
+    ```
+
+Configuration Resources
+- handoff://configuration
+  - Description: Current configuration snapshot
+  - Payload shape:
+    ```json
+    { "version": "string", "updated_at": "ISO-8601", "settings": { "feature_flags": {}, "limits": {}, "endpoints": {} } }
+    ```
+- handoff://configuration/backups
+  - Description: List or details of configuration backups
+  - Payload shape:
+    ```json
+    { "backups": [ { "id": "string", "created_at": "ISO-8601", "checksum": "string", "size_bytes": 0 } ], "total": 0 }
+    ```
+
+Usage Examples
+
+TypeScript: sessions and context
+```ts
+const sessionsRes = await client.readResource('handoff://sessions');
+const sessionsJson = JSON.parse(sessionsRes.contents[0].text);
+console.log('Sessions total:', sessionsJson.total);
+
+const sessionKey = sessionsJson.sessions?.[0]?.sessionKey ?? 'session-1722600000000';
+const ctxRes = await client.readResource(`handoff://context/${sessionKey}`);
+const ctxJson = JSON.parse(ctxRes.contents[0].text);
+for (const e of ctxJson.entries ?? []) {
+  console.log(`#${e.sequence_number} [${e.context_type}]`, e.created_at);
 }
 ```
 
-- handoff://summary/{sessionKey}
-```json
-{
-  "sessionKey": "session-1722600000000",
-  "summary": "User greeted and requested implementation details. Key topics: implementation.",
-  "generatedAt": "2025-08-02T12:02:00.000Z"
+TypeScript: system health and metrics
+```ts
+const healthRes = await client.readResource('handoff://health');
+const health = JSON.parse(healthRes.contents[0].text);
+console.log('Health:', health.status);
+
+const metricsRes = await client.readResource('handoff://metrics');
+// Prometheus exposition text is in metricsRes.contents[0].text
+console.log(metricsRes.contents[0].text.split('\n').slice(0, 5).join('\n'));
+```
+
+TypeScript: jobs overview and specific job
+```ts
+const jobsRes = await client.readResource('handoff://jobs');
+const jobs = JSON.parse(jobsRes.contents[0].text);
+console.log('Jobs:', jobs.jobs.map((j: any) => `${j.name}:${j.state}`).join(', '));
+
+const jobName = jobs.jobs?.[0]?.name ?? 'daily_aggregation';
+const jobDetailRes = await client.readResource(`handoff://jobs/${jobName}`);
+const jobDetail = JSON.parse(jobDetailRes.contents[0].text);
+console.log('Job history entries:', jobDetail.history?.length ?? 0);
+```
+
+TypeScript: analytics datasets
+```ts
+const types = ['sessions', 'handoffs', 'context', 'performance', 'resources'] as const;
+for (const t of types) {
+  const res = await client.readResource(`handoff://analytics/${t}`);
+  const body = JSON.parse(res.contents[0].text);
+  console.log(`[analytics:${t}]`, (body.data ?? []).length);
 }
+```
+
+TypeScript: configuration and backups
+```ts
+const cfgRes = await client.readResource('handoff://configuration');
+const cfg = JSON.parse(cfgRes.contents[0].text);
+console.log('Config version:', cfg.version);
+
+const backupsRes = await client.readResource('handoff://configuration/backups');
+const backups = JSON.parse(backupsRes.contents[0].text);
+console.log('Backups:', backups.total);
 ```
 
 Notes
-- URIs are parsed and validated by the server resource registry
-- Large contexts may be paginated or truncated with hasMore indicators
-- Summaries are cached with TTL for performance
+- URIs are validated by the server resource registry.
+- Large payloads may be truncated or paginated with has_more indicators.
+- Use snake_case tool names when cross-referencing tools elsewhere in docs.
 
 Related
 - Sessions: ./sessions.md

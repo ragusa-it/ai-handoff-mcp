@@ -45,7 +45,7 @@ src/
 ### 4. **MCP Server Implementation**
 - ✅ **Standard MCP Protocol**: Full compliance with MCP specification
 - ✅ **Tool Definitions**: Complete with JSON schemas for validation
-- ✅ **Resource Endpoints**: RESTful access to session data
+- ✅ **Resource Endpoints**: Access to session, system health, metrics, and analytics data
 - ✅ **Error Handling**: Comprehensive error management with proper MCP error codes
 
 ### 5. **Core MCP Tools**
@@ -55,7 +55,7 @@ src/
 - Validates unique session keys
 - Initializes context history
 
-#### `update_context` 
+#### `update_context`
 - Adds context entries (messages, files, tool calls, system events)
 - Maintains sequence ordering
 - Caches recent context for performance
@@ -71,6 +71,16 @@ src/
 - Supports multiple languages (TypeScript, JavaScript, Python, etc.)
 - Provides syntax, dependency, and structural analysis
 - Calculates code complexity metrics
+
+#### Configuration management tools
+- `get_configuration`, `update_configuration`, `manage_configuration_backup` for config lifecycle and backups
+
+#### Background job management tools
+- `get_job_status`, `run_job_now`, `update_job_config` for scheduling and ad-hoc execution
+
+#### Monitoring and analytics
+- System health and metrics resources for observability
+- Analytics resources for usage insights and anomaly detection
 
 ### 6. **Context Management Services**
 - ✅ **Full Context Retrieval**: Complete session history with summaries
@@ -120,41 +130,42 @@ npm start
 
 ### MCP Tool Usage
 ```json
-// Register a session
 {
   "method": "tools/call",
   "params": {
     "name": "register_session",
     "arguments": {
-      "sessionKey": "agent-session-001",
-      "agentFrom": "coding-assistant",
+      "session_key": "agent-session-001",
+      "agent_from": "coding-assistant",
       "metadata": {"project": "web-app"}
     }
   }
 }
+```
 
-// Add context
+```json
 {
-  "method": "tools/call", 
+  "method": "tools/call",
   "params": {
     "name": "update_context",
     "arguments": {
-      "sessionKey": "agent-session-001",
-      "contextType": "message",
+      "session_key": "agent-session-001",
+      "context_type": "message",
       "content": "User wants to add authentication to the app"
     }
   }
 }
+```
 
-// Request handoff
+```json
 {
   "method": "tools/call",
   "params": {
-    "name": "request_handoff", 
+    "name": "request_handoff",
     "arguments": {
-      "sessionKey": "agent-session-001",
-      "targetAgent": "security-specialist",
-      "requestType": "context_transfer"
+      "session_key": "agent-session-001",
+      "target_agent": "security-specialist",
+      "request_type": "context_transfer"
     }
   }
 }
@@ -162,10 +173,12 @@ npm start
 
 ## 🏗️ Architecture Highlights
 
-- **Modular Design**: Clean separation of concerns with dedicated services
+- **Modular Design**: Clean separation of concerns with dedicated services (sessions, context, handoff, configuration, background jobs, analytics)
 - **Type Safety**: Full TypeScript implementation with strict typing
 - **Scalable Storage**: PostgreSQL for persistence, Redis for caching
-- **MCP Compliance**: Standard protocol implementation for client compatibility
+- **MCP Compliance**: Standard protocol implementation exposing tools and resources
+- **Observability**: System health and metrics resources, monitoring and analytics services
+- **Config Management**: Configuration tools with backup/restore capabilities
 - **Error Resilience**: Comprehensive error handling and validation
 - **Performance**: Connection pooling, caching, and optimized queries
 

@@ -29,7 +29,6 @@ Documentation Index
 - Troubleshooting: ./docs/troubleshooting.md
 - Performance: ./docs/performance.md
 - FAQ: ./docs/faq.md
-- FAQ: ./docs/faq.md
 - Contributing: ./docs/contributing.md
 - Release Notes: ./docs/release-notes.md
 - License: ./docs/license.md

@@ -6,7 +6,7 @@ Terminology
 - Session: A logical container identified by sessionKey that groups context entries and handoff requests across agents
 - Context Entry: A sequenced item of data text, file ref, tool_call, system associated with a session
 - Handoff: A request to transfer session context to a target agent with an explicit handoff type
-- MCP Tool: A callable function exposed by the MCP server to clients registerSession, updateContext, requestHandoff, etc.
+- MCP Tool: A callable function exposed by the MCP server to clients register_session, update_context, request_handoff, etc.
 - MCP Resource: A read-only endpoint exposed via a URI handoff://... for discovery and retrieval
 - Persistence Layer: PostgreSQL relational schema used for durable state
 - Cache Layer: Redis-backed cache for hot paths and summaries
@@ -73,14 +73,14 @@ sequenceDiagram
   participant DB as PostgreSQL
   participant R as Redis
 
-  Client->>MCP: callTool registerSession { sessionKey, agentFrom, metadata }
+  Client->>MCP: callTool register_session { sessionKey, agentFrom, metadata }
   MCP->>SM: create session
   SM->>DB: insert session
   DB-->>SM: session created
   SM-->>MCP: session details
   MCP-->>Client: success with session
 
-  Client->>MCP: callTool updateContext { sessionKey, contextType, content }
+  Client->>MCP: callTool update_context { sessionKey, contextType, content }
   MCP->>CM: add context entry
   CM->>DB: insert context_entry sequenceNumber
   DB-->>CM: entry saved
@@ -89,7 +89,7 @@ sequenceDiagram
   CM-->>MCP: success + contextEntry
   MCP-->>Client: success
 
-  Client->>MCP: callTool requestHandoff { sessionKey, targetAgent, requestType }
+  Client->>MCP: callTool request_handoff { sessionKey, targetAgent, requestType }
   MCP->>CM: build handoff package summary + full context
   CM->>DB: read context
   DB-->>CM: context list
@@ -117,8 +117,26 @@ Handoff Types
 - collaboration: Enable multi-agent shared context without closing the source session
 
 MCP Tools and Resources overview
-- Tools: registerSession, updateContext, requestHandoff, getConfiguration, updateConfiguration, manageConfigurationBackup
-- Resources: handoff://sessions, handoff://context/{sessionKey}, handoff://summary/{sessionKey}, handoff://agents/{agentId}/sessions
+- Tools:
+  - register_session — Register or update a session with metadata
+  - update_context — Append a sequenced context entry to a session
+  - request_handoff — Construct and return a handoff package for a target agent
+  - get_configuration — Retrieve current configuration
+  - update_configuration — Update configuration values
+  - manage_configuration_backup — Create/restore/delete configuration backups
+  - analyze_codebase — Analyze codebase files and extract context
+  - get_job_status — Get background job status and statistics
+  - run_job_now — Manually trigger background jobs
+  - update_job_config — Update background job configuration
+- Resources:
+  - handoff://health
+  - handoff://metrics
+  - handoff://analytics/{type}
+  - handoff://sessions/lifecycle
+  - handoff://configuration
+  - handoff://configuration/backups
+  - handoff://jobs
+  - handoff://jobs/{jobName}
 
 Error Handling and Resilience
 - Structured errors with machine-readable codes

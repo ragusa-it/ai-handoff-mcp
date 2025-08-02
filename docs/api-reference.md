@@ -9,7 +9,7 @@ Conventions
 
 Tools
 
-registerSession
+register_session
 - Purpose: Create a new session with lifecycle initialization
 - Arguments
   - sessionKey string required
@@ -23,7 +23,7 @@ registerSession
 Example
 ```ts
 const res = await client.callTool({
-  name: 'registerSession',
+  name: 'register_session',
   arguments: { sessionKey: 'session-' + Date.now(), agentFrom: 'docs', metadata: { purpose: 'api-ref' } }
 });
 const payload = JSON.parse(res.content[0].text);
@@ -41,7 +41,7 @@ Failure Example duplicate
 }
 ```
 
-updateContext
+update_context
 - Purpose: Append a context entry to an active session with sequencing
 - Arguments
   - sessionKey string required
@@ -57,7 +57,7 @@ updateContext
 Example
 ```ts
 const res = await client.callTool({
-  name: 'updateContext',
+  name: 'update_context',
   arguments: { sessionKey, contextType: 'message', content: 'Hello', metadata: { source: 'user' } }
 });
 const payload = JSON.parse(res.content[0].text);
@@ -73,7 +73,7 @@ Error Cases
 { "success": false, "error": "Session is not active", "sessionKey": "...", "currentStatus": "expired" }
 ```
 
-requestHandoff
+request_handoff
 - Purpose: Prepare and request a handoff to a target agent
 - Arguments
   - sessionKey string required
@@ -89,7 +89,7 @@ requestHandoff
 Example
 ```ts
 const res = await client.callTool({
-  name: 'requestHandoff',
+  name: 'request_handoff',
   arguments: {
     sessionKey,
     targetAgent: 'downstream-assistant',
@@ -100,7 +100,7 @@ const res = await client.callTool({
 const payload = JSON.parse(res.content[0].text);
 ```
 
-getConfiguration
+get_configuration
 - Purpose: Read effective configuration snapshot
 - Arguments
   - keys string[] optional limit retrieval to selected keys
@@ -108,7 +108,7 @@ getConfiguration
   - configuration object flattened keys to values
   - timestamp ISO string
 
-updateConfiguration
+update_configuration
 - Purpose: Update configuration values with validation
 - Arguments
   - updates object required map of key to new value
@@ -118,7 +118,7 @@ updateConfiguration
   - restartRequired boolean
   - validationErrors string[] optional
 
-manageConfigurationBackup
+manage_configuration_backup
 - Purpose: Manage configuration backups
 - Arguments
   - action string required create restore list delete
@@ -128,6 +128,78 @@ manageConfigurationBackup
   - success boolean
   - backupId string for create
   - backups array for list
+
+analyze_codebase
+- Purpose: Analyze codebase files and extract context
+- Arguments
+  - includeGlobs string[] optional
+  - excludeGlobs string[] optional
+  - maxFiles number optional
+- Returns
+  - success boolean
+  - analyzedFiles number
+  - contextSummary object
+
+Example
+```ts
+const res = await client.callTool({
+  name: 'analyze_codebase',
+  arguments: { includeGlobs: ['src/**/*.ts'], excludeGlobs: ['**/__tests__/**'], maxFiles: 200 }
+});
+const payload = JSON.parse(res.content[0].text);
+```
+
+get_job_status
+- Purpose: Get background job status and statistics
+- Arguments
+  - jobName string optional
+- Returns
+  - success boolean
+  - jobs array name, status, lastRunAt, nextRunAt, runs, failures
+
+Example
+```ts
+const res = await client.callTool({
+  name: 'get_job_status',
+  arguments: {}
+});
+const payload = JSON.parse(res.content[0].text);
+```
+
+run_job_now
+- Purpose: Manually trigger background jobs
+- Arguments
+  - jobName string required
+- Returns
+  - success boolean
+  - job object name, triggeredAt, result
+
+Example
+```ts
+const res = await client.callTool({
+  name: 'run_job_now',
+  arguments: { jobName: 'analytics-rollup' }
+});
+const payload = JSON.parse(res.content[0].text);
+```
+
+update_job_config
+- Purpose: Update background job configuration
+- Arguments
+  - jobName string required
+  - config object required
+- Returns
+  - success boolean
+  - updated object jobName, config
+
+Example
+```ts
+const res = await client.callTool({
+  name: 'update_job_config',
+  arguments: { jobName: 'analytics-rollup', config: { interval: '5m', enabled: true } }
+});
+const payload = JSON.parse(res.content[0].text);
+```
 
 Resources
 
@@ -156,6 +228,30 @@ handoff://agents/{agentId}/sessions
 - Returns
   - agentId string
   - sessions array sessionKey, status, createdAt
+
+handoff://health
+- Description: System health status
+
+handoff://metrics
+- Description: Prometheus metrics
+
+handoff://analytics/{type}
+- Description: Analytics data by type: sessions, handoffs, context, performance, resources
+
+handoff://sessions/lifecycle
+- Description: Session lifecycle monitoring
+
+handoff://configuration
+- Description: System configuration snapshot
+
+handoff://configuration/backups
+- Description: Configuration backups listing
+
+handoff://jobs
+- Description: Background jobs status overview
+
+handoff://jobs/{jobName}
+- Description: Specific job details including scheduling and last run
 
 Error Reference
 
