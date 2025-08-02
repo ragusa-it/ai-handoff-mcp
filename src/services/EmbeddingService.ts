@@ -262,7 +262,7 @@ export class EmbeddingService {
         throw new Error(`Local embedding service error: ${response.status} ${response.statusText}`);
       }
 
-      const data = await response.json();
+      const data = await response.json() as { embeddings: number[][], model?: string };
       
       if (!data.embeddings || !Array.isArray(data.embeddings) || data.embeddings.length === 0) {
         throw new Error('Invalid response from local embedding service');
@@ -315,7 +315,7 @@ export class EmbeddingService {
         throw new Error(`OpenAI API error: ${response.status} ${errorData.error?.message || response.statusText}`);
       }
 
-      const data = await response.json();
+      const data = await response.json() as { data: { embedding: number[] }[], model?: string };
       
       if (!data.data || !Array.isArray(data.data) || data.data.length === 0) {
         throw new Error('Invalid response from OpenAI API');
@@ -323,7 +323,7 @@ export class EmbeddingService {
 
       return {
         embedding: data.data[0].embedding,
-        model: 'text-embedding-3-small',
+        model: data.model || this.config.model_name,
         provider: 'openai',
         cached: false,
         processing_time_ms: Date.now() - startTime,
@@ -387,7 +387,7 @@ export class EmbeddingService {
       throw new Error(`Local embedding service error: ${response.status} ${response.statusText}`);
     }
 
-    const data = await response.json();
+    const data = await response.json() as { embeddings: number[][] };
     
     if (!data.embeddings || !Array.isArray(data.embeddings)) {
       throw new Error('Invalid response from local embedding service');
@@ -438,13 +438,13 @@ export class EmbeddingService {
         throw new Error(`OpenAI API error: ${response.status} ${errorData.error?.message || response.statusText}`);
       }
 
-      const data = await response.json();
+      const data = await response.json() as { data: { embedding: number[] }[] };
       
       if (!data.data || !Array.isArray(data.data)) {
         throw new Error('Invalid response from OpenAI API');
       }
 
-      const batchEmbeddings = data.data.map((item: any) => item.embedding);
+      const batchEmbeddings = data.data.map((item) => item.embedding);
       allEmbeddings.push(...batchEmbeddings);
     }
 

@@ -10,11 +10,13 @@ export enum LogLevel {
 
 // Context interfaces for different log types
 export interface BaseLogContext {
-  timestamp: Date;
+  timestamp?: Date;
   sessionId?: string;
   correlationId?: string;
   userId?: string;
   metadata?: Record<string, any>;
+  // Allow additional properties for flexible logging
+  [key: string]: any;
 }
 
 export interface ToolCallContext extends BaseLogContext {
@@ -402,6 +404,9 @@ export class StructuredLogger implements IStructuredLogger {
 
 // Create and export a default logger instance
 export const structuredLogger = new StructuredLogger();
+
+// Export default logger as 'logger' for convenience
+export const logger = structuredLogger;
 
 // Export utility functions
 export function createLogger(config?: Partial<LoggerConfig>): StructuredLogger {

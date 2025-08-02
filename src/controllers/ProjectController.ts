@@ -92,13 +92,24 @@ export class ProjectController {
    */
   async findAll(req: Request, res: Response): Promise<void> {
     try {
-      const queryParams: Partial<ProjectQuery> = {
-        limit: req.query.limit ? parseInt(req.query.limit as string) : undefined,
-        offset: req.query.offset ? parseInt(req.query.offset as string) : undefined,
-        search: req.query.search as string,
-        sort_by: req.query.sort_by as any,
-        sort_order: req.query.sort_order as any,
-      };
+      const queryParams: Partial<ProjectQuery> = {};
+      
+      // Only add properties if they're not undefined to satisfy exactOptionalPropertyTypes
+      if (req.query.limit) {
+        queryParams.limit = parseInt(req.query.limit as string);
+      }
+      if (req.query.offset) {
+        queryParams.offset = parseInt(req.query.offset as string);
+      }
+      if (req.query.search) {
+        queryParams.search = req.query.search as string;
+      }
+      if (req.query.sort_by) {
+        queryParams.sort_by = req.query.sort_by as any;
+      }
+      if (req.query.sort_order) {
+        queryParams.sort_order = req.query.sort_order as any;
+      }
 
       const result = await this.projectModel.findAll(queryParams);
 

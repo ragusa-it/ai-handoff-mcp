@@ -1,5 +1,5 @@
 import * as path from 'path';
-import { logger } from '../services/structuredLogger.js';
+
 
 /**
  * Git-related utility functions
@@ -35,13 +35,20 @@ export function parseConventionalCommit(message: string): ConventionalCommit {
   const match = firstLine.match(conventionalRegex);
   
   if (!match) {
-    return {
+    const bodyContent = lines.slice(1).join('\n').trim();
+    const result: ConventionalCommit = {
       type: 'other',
       description: firstLine,
-      body: lines.slice(1).join('\n').trim() || undefined,
       breaking: message.includes('BREAKING CHANGE') || message.includes('!:'),
       isValid: false,
     };
+    
+    // Only add body if it's not empty to satisfy exactOptionalPropertyTypes
+    if (bodyContent) {
+      result.body = bodyContent;
+    }
+    
+    return result;
   }
 
   const [, type, scopeMatch, breaking, description] = match;
@@ -54,14 +61,24 @@ export function parseConventionalCommit(message: string): ConventionalCommit {
                      (body && body.includes('BREAKING CHANGE')) ||
                      message.includes('BREAKING CHANGE');
 
-  return {
+  const result: ConventionalCommit = {
     type,
-    scope,
     description: description.trim(),
-    body,
     breaking: hasBreaking,
     isValid: true,
   };
+  
+  // Only add scope if it's not undefined to satisfy exactOptionalPropertyTypes
+  if (scope !== undefined) {
+    result.scope = scope;
+  }
+  
+  // Only add body if it's not undefined to satisfy exactOptionalPropertyTypes
+  if (body !== undefined) {
+    result.body = body;
+  }
+  
+  return result;
 }
 
 /**
@@ -142,12 +159,23 @@ export function getFileInfo(filePath: string): {
   const isBinary = binaryExtensions.has(ext);
   const isGenerated = generatedPatterns.some(pattern => pattern.test(filePath));
 
-  return {
+  const result: {
+    extension: string;
+    language?: string;
+    isBinary: boolean;
+    isGenerated: boolean;
+  } = {
     extension: ext,
-    language,
     isBinary,
     isGenerated,
   };
+  
+  // Only add language if it's not undefined to satisfy exactOptionalPropertyTypes
+  if (language !== undefined) {
+    result.language = language;
+  }
+  
+  return result;
 }
 
 /**
@@ -239,7 +267,6 @@ export function detectLanguage(filePath: string): string | undefined {
     '.cljs': 'clojure',
     '.ml': 'ocaml',
     '.mli': 'ocaml',
-    '.fs': 'fsharp',
     '.fsx': 'fsharp',
     
     // Data/Config formats

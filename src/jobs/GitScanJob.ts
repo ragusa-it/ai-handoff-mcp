@@ -162,14 +162,14 @@ export class GitScanJob {
         throw new Error(`Project not found: ${jobData.projectId}`);
       }
 
-      if (!project.git_repo_path) {
+      if (!project.repo_path) {
         throw new Error(`Project does not have git repository configured: ${jobData.projectId}`);
       }
 
       // Update options with actual repository path
       const scanOptions: GitScanOptions = {
         ...jobData.options,
-        repositoryPath: project.git_repo_path,
+        repositoryPath: project.repo_path,
       };
 
       // Perform the git scan
@@ -423,14 +423,27 @@ export class GitScanJob {
             startedAt = statusData.started_at;
           }
 
-          jobs.push({
+          const jobEntry: {
+            scanId: string;
+            projectId: string;
+            status: string;
+            queuedAt?: string;
+            startedAt?: string;
+            priority: string;
+          } = {
             scanId,
             projectId: jobData.projectId,
             status,
             queuedAt: jobData.queuedAt,
-            startedAt,
             priority: jobData.priority,
-          });
+          };
+          
+          // Only add startedAt if it's not undefined to satisfy exactOptionalPropertyTypes
+          if (startedAt !== undefined) {
+            jobEntry.startedAt = startedAt;
+          }
+          
+          jobs.push(jobEntry);
         }
       }
 

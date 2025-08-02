@@ -109,11 +109,18 @@ export class GitService {
       logger.info('Found branches', { branches: branches.slice(0, 5) });
 
       // Get commit log
-      const commits = await this.getCommitLog(repositoryPath, {
+      // Create a proper options object for exactOptionalPropertyTypes compatibility
+      const logOptions: { ref?: string; since?: Date; maxCommits?: number } = {
         ref: branch,
-        since,
         maxCommits,
-      });
+      };
+      
+      // Only add since if it's not undefined to satisfy exactOptionalPropertyTypes
+      if (since !== undefined) {
+        logOptions.since = since;
+      }
+      
+      const commits = await this.getCommitLog(repositoryPath, logOptions);
 
       logger.info('Found commits', { count: commits.length });
 
@@ -140,7 +147,10 @@ export class GitService {
               committed_at: new Date(commitInfo.commit.committer.timestamp * 1000),
               message: commitInfo.commit.message.trim(),
               parents: commitInfo.commit.parent,
-              branches: branches.filter(b => await this.commitExistsOnBranch(repositoryPath, commitInfo.oid, b)),
+              branches: await Promise.all(branches.map(async b => {
+                const exists = await this.commitExistsOnBranch(repositoryPath, commitInfo.oid, b);
+                return exists ? b : null;
+              })).then(results => results.filter((b): b is string => b !== null)),
               metadata: {
                 tree: commitInfo.commit.tree,
                 committer: {
@@ -355,10 +365,11 @@ export class GitService {
       
       if (!parentEntry) {
         // Added file
+        const language = this.detectLanguage(path);
         const change: FileChange = {
           path,
           changeType: 'A',
-          language: this.detectLanguage(path),
+          ...(language !== undefined && { language }),
           addedLines: 0,
           removedLines: 0,
         };
@@ -376,10 +387,11 @@ export class GitService {
         changes.push(change);
       } else if (entry.oid !== parentEntry.oid && entry.type === 'blob') {
         // Modified file
+        const language = this.detectLanguage(path);
         const change: FileChange = {
           path,
           changeType: 'M',
-          language: this.detectLanguage(path),
+          ...(language !== undefined && { language }),
           addedLines: 0,
           removedLines: 0,
         };
@@ -407,10 +419,11 @@ export class GitService {
     // Find deleted files
     for (const [path, entry] of parentFiles) {
       if (!commitFiles.has(path)) {
+        const language = this.detectLanguage(path);
         const change: FileChange = {
           path,
           changeType: 'D',
-          language: this.detectLanguage(path),
+          ...(language !== undefined && { language }),
           addedLines: 0,
           removedLines: 0,
         };
@@ -644,13 +657,34 @@ export class GitService {
         dir: repositoryPath,
       });
 
-      return {
+      const result: {
+        isValid: boolean;
+        currentBranch?: string;
+        commitCount?: number;
+        lastCommit?: {
+          id: string;
+          message: string;
+          author: string;
+          date: Date;
+        };
+        branches?: string[];
+      } = {
         isValid: true,
-        currentBranch: currentBranch || undefined,
         commitCount: allCommits.length,
-        lastCommit,
         branches,
       };
+      
+      // Only add currentBranch if it's not undefined to satisfy exactOptionalPropertyTypes
+      if (currentBranch !== undefined) {
+        result.currentBranch = currentBranch;
+      }
+      
+      // Only add lastCommit if it's not undefined to satisfy exactOptionalPropertyTypes
+      if (lastCommit !== undefined) {
+        result.lastCommit = lastCommit;
+      }
+      
+      return result;
 
     } catch (error) {
       logger.error('Failed to get repository info', { repositoryPath, error });

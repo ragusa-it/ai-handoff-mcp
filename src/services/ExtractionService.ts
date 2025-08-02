@@ -5,7 +5,6 @@ import { CommitModel, Commit, CommitFile } from '../models/Commit.js';
 import { EmbeddingService } from './EmbeddingService.js';
 import { logger } from './structuredLogger.js';
 import { 
-  parseConventionalCommit, 
   generateCommitSummary,
   detectLanguage,
   calculateFileComplexity 
@@ -194,6 +193,7 @@ export class ExtractionService {
             commit_hashes: draft.commit_hashes,
             extracted_from: draft.extracted_from,
             confidence: draft.confidence,
+            line_ranges: [], // Add missing required property
           };
 
           const memory = await this.memoryModel.create(memoryData);
@@ -434,14 +434,20 @@ export class ExtractionService {
                        (body && body.includes('BREAKING CHANGE')) ||
                        message.includes('BREAKING CHANGE');
 
-    return {
+    const result: ParsedConventionalCommit = {
       type,
-      scope,
       description: description.trim(),
       breaking: hasBreaking,
       issues: this.extractIssueRefs(message),
       isValid: true,
     };
+    
+    // Only add scope if it's not undefined to satisfy exactOptionalPropertyTypes
+    if (scope !== undefined) {
+      result.scope = scope;
+    }
+    
+    return result;
   }
 
   private extractIssueRefs(message: string): number[] {
@@ -485,7 +491,7 @@ export class ExtractionService {
     return normalized.substring(0, this.config.max_content_length);
   }
 
-  private buildFactualContent(parsed: ParsedConventionalCommit, commit: Commit): string {
+  private buildFactualContent(parsed: ParsedConventionalCommit, _commit: Commit): string {
     let content = `${parsed.type}: ${parsed.description}`;
     
     if (parsed.scope) {
@@ -603,7 +609,7 @@ Improved:`;
     }
 
     const data = await response.json();
-    return data.response?.trim() || null;
+    return (data as { response?: string }).response?.trim() || null;
   }
 
   private async callOpenAI(prompt: string): Promise<string | null> {
@@ -631,18 +637,33 @@ Improved:`;
     }
 
     const data = await response.json();
-    return data.choices?.[0]?.message?.content?.trim() || null;
+    return (data as { choices?: Array<{ message?: { content?: string } }> }).choices?.[0]?.message?.content?.trim() || null;
   }
 
   private getConfigFromEnv(): Partial<ExtractionConfig> {
-    return {
-      diff_threshold: process.env.EXTRACTION_DIFF_THRESHOLD ? 
-        parseInt(process.env.EXTRACTION_DIFF_THRESHOLD) : undefined,
-      llm_enabled: process.env.LLM_EXTRACTION_ENABLED === 'true',
-      llm_provider: (process.env.LLM_PROVIDER as any) || 'ollama',
-      llm_model: process.env.LLM_MODEL || 'phi3:mini',
-      llm_base_url: process.env.OLLAMA_BASE_URL || 'http://localhost:11434',
-    };
+    const config: Partial<ExtractionConfig> = {};
+    
+    if (process.env.EXTRACTION_DIFF_THRESHOLD) {
+      config.diff_threshold = parseInt(process.env.EXTRACTION_DIFF_THRESHOLD);
+    }
+    
+    if (process.env.LLM_EXTRACTION_ENABLED !== undefined) {
+      config.llm_enabled = process.env.LLM_EXTRACTION_ENABLED === 'true';
+    }
+    
+    if (process.env.LLM_PROVIDER) {
+      config.llm_provider = process.env.LLM_PROVIDER as 'ollama' | 'openai';
+    }
+    
+    if (process.env.LLM_MODEL) {
+      config.llm_model = process.env.LLM_MODEL;
+    }
+    
+    if (process.env.OLLAMA_BASE_URL) {
+      config.llm_base_url = process.env.OLLAMA_BASE_URL;
+    }
+    
+    return config;
   }
 
   /**

@@ -80,7 +80,7 @@ export class GitController {
         return;
       }
 
-      if (!project.git_repo_path) {
+      if (!project.repo_path) {
         res.status(400).json({
           success: false,
           error: 'Project does not have a git repository path configured',
@@ -102,12 +102,12 @@ export class GitController {
       }
 
       // Validate repository
-      const repoInfo = await this.gitService.getRepositoryInfo(project.git_repo_path);
+      const repoInfo = await this.gitService.getRepositoryInfo(project.repo_path);
       if (!repoInfo.isValid) {
         res.status(400).json({
           success: false,
           error: 'Invalid git repository path',
-          path: project.git_repo_path,
+          path: project.repo_path,
         });
         return;
       }
@@ -119,13 +119,17 @@ export class GitController {
       // Set up scan options
       const scanOptions: GitScanOptions = {
         projectId: data.project_id,
-        repositoryPath: project.git_repo_path,
+        repositoryPath: project.repo_path,
         branch: data.branch || repoInfo.currentBranch || 'main',
-        since: data.since ? new Date(data.since) : undefined,
         maxCommits: data.max_commits,
         includeFiles: data.include_files,
         includeDiffs: data.include_diffs,
       };
+      
+      // Only add since if it's not undefined to satisfy exactOptionalPropertyTypes
+      if (data.since) {
+        scanOptions.since = new Date(data.since);
+      }
 
       // Start background scan
       this.performGitScan(scanId, scanOptions, project.name)
@@ -376,7 +380,7 @@ export class GitController {
         return;
       }
 
-      if (!project.git_repo_path) {
+      if (!project.repo_path) {
         res.status(400).json({
           success: false,
           error: 'Project does not have a git repository configured',
@@ -398,14 +402,14 @@ export class GitController {
       }
 
       // Get repository info
-      const repoInfo = await this.gitService.getRepositoryInfo(project.git_repo_path);
+      const repoInfo = await this.gitService.getRepositoryInfo(project.repo_path);
       
       // Get commit statistics
       const stats = await this.commitModel.getCommitStats(queryData.project_id);
 
       const result = {
         project_id: queryData.project_id,
-        repository_path: project.git_repo_path,
+        repository_path: project.repo_path,
         repository_info: repoInfo,
         commit_stats: stats,
       };

@@ -222,11 +222,11 @@ function parseFileDiff(diffContent: string): ParsedDiff | null {
       totalLines: addedLines + removedLines + contextLines,
     },
     metadata: {
-      oldMode,
-      newMode,
-      similarity,
-      language,
       complexity,
+      ...(oldMode !== undefined && { oldMode }),
+      ...(newMode !== undefined && { newMode }),
+      ...(similarity !== undefined && { similarity }),
+      ...(language !== undefined && { language }),
     },
   };
 }
@@ -329,14 +329,27 @@ export function extractCodeSnippets(
       });
 
     if (snippetLines.length > 0) {
-      snippets.push({
+      const snippetObj: {
+        filePath: string;
+        language?: string;
+        changeType: string;
+        snippet: string;
+        addedLines: number;
+        removedLines: number;
+      } = {
         filePath: diff.newPath || diff.oldPath,
-        language: diff.metadata.language,
         changeType: diff.changeType,
         snippet: snippetLines.join('\n'),
         addedLines: diff.stats.addedLines,
         removedLines: diff.stats.removedLines,
-      });
+      };
+      
+      // Only add language if it's not undefined to satisfy exactOptionalPropertyTypes
+      if (diff.metadata.language !== undefined) {
+        snippetObj.language = diff.metadata.language;
+      }
+      
+      snippets.push(snippetObj);
     }
   }
 
@@ -615,8 +628,8 @@ function parsePlainPatch(patchSection: string): ParsedDiff | null {
       totalLines: addedLines + removedLines + contextLines,
     },
     metadata: {
-      language,
       complexity,
+      ...(language !== undefined && { language }),
     },
   };
 }

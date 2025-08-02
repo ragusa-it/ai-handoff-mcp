@@ -253,8 +253,8 @@ export class MemoryService {
       return {
         memory,
         related_memories: relatedMemories,
-        linked_commits,
-        timeline_context,
+        linked_commits: linkedCommits,
+        timeline_context: timelineContext,
       };
     } catch (error) {
       logger.error('Failed to get memory context', { error, memoryId });
