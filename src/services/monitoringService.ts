@@ -304,6 +304,8 @@ export class MonitoringService implements IMonitoringService {
     structuredLogger.info('Health check completed', {
       timestamp: new Date(),
       metadata: {
+        component: 'MonitoringService',
+        operation: 'getSystemHealth',
         metricName: 'health_check_duration',
         metricValue: timer.getElapsed(),
         metricType: 'timer',
@@ -317,9 +319,9 @@ export class MonitoringService implements IMonitoringService {
     structuredLogger.error('System health check failed', {
       timestamp: new Date(),
       metadata: {
-        errorType: 'SystemError',
         component: 'MonitoringService',
         operation: 'getSystemHealth',
+        errorType: 'SystemError',
         errorMessage: (error as Error).message
       }
     });
@@ -729,14 +731,16 @@ export class MonitoringService implements IMonitoringService {
 
       // Store in database for historical analysis (avoid recursion by not storing DB query metrics in DB)
       if (duration > this.config.alertThresholds.responseTime) {
-    structuredLogger.warn(`Slow database query detected: ${duration}ms`, {
+    structuredLogger.logWarning(`Slow database query detected: ${duration}ms`, {
       timestamp: new Date(),
-      warningType: 'Performance',
       component: 'DatabaseQuery',
-      threshold: this.config.alertThresholds.responseTime,
-      currentValue: duration,
-      recommendation: 'Consider optimizing query or adding indexes'
-    } as any);
+      warningType: 'Performance',
+      metadata: {
+        threshold: this.config.alertThresholds.responseTime,
+        currentValue: duration,
+        recommendation: 'Consider optimizing query or adding indexes'
+      }
+    });
       }
     } catch (error) {
     structuredLogger.error('Failed to record database query', {
@@ -782,14 +786,16 @@ export class MonitoringService implements IMonitoringService {
 
       // Alert on slow Redis operations
       if (duration > this.config.alertThresholds.responseTime / 2) { // Redis should be faster than DB
-    structuredLogger.warn(`Slow Redis operation detected: ${operation} took ${duration}ms`, {
+    structuredLogger.logWarning(`Slow Redis operation detected: ${operation} took ${duration}ms`, {
       timestamp: new Date(),
-      warningType: 'Performance',
       component: 'RedisOperation',
-      threshold: this.config.alertThresholds.responseTime / 2,
-      currentValue: duration,
-      recommendation: 'Check Redis connectivity and memory usage'
-    } as any);
+      warningType: 'Performance',
+      metadata: {
+        threshold: this.config.alertThresholds.responseTime / 2,
+        currentValue: duration,
+        recommendation: 'Check Redis connectivity and memory usage'
+      }
+    });
       }
     } catch (error) {
     structuredLogger.error('Failed to record Redis operation', {
@@ -1028,12 +1034,14 @@ export class MonitoringService implements IMonitoringService {
       
       // Alert on unhealthy status
       if (health.overall === 'unhealthy') {
-    structuredLogger.warn('System health check failed', {
+    structuredLogger.logWarning('System health check failed', {
       timestamp: new Date(),
-      warningType: 'Resource',
       component: 'SystemHealth',
-      recommendation: 'Check component health details'
-    } as any);
+      warningType: 'Resource',
+      metadata: {
+        recommendation: 'Check component health details'
+      }
+    });
       }
 
       // Update system metrics
@@ -1042,9 +1050,9 @@ export class MonitoringService implements IMonitoringService {
     structuredLogger.error('Failed to perform periodic health check', {
       timestamp: new Date(),
       metadata: {
-        errorType: 'SystemError',
         component: 'MonitoringService',
         operation: 'performPeriodicHealthCheck',
+        errorType: 'SystemError',
         errorMessage: (error as Error).message
       }
     });
@@ -1072,9 +1080,9 @@ export class MonitoringService implements IMonitoringService {
     structuredLogger.error('Failed to collect system metrics', {
       timestamp: new Date(),
       metadata: {
-        errorType: 'SystemError',
         component: 'MonitoringService',
         operation: 'collectSystemMetrics',
+        errorType: 'SystemError',
         errorMessage: (error as Error).message
       }
     });
@@ -1148,9 +1156,9 @@ export class MonitoringService implements IMonitoringService {
     structuredLogger.error('Failed to perform hourly aggregations', {
       timestamp: new Date(),
       metadata: {
-        errorType: 'SystemError',
         component: 'MonitoringService',
         operation: 'performHourlyAggregations',
+        errorType: 'SystemError',
         errorMessage: (error as Error).message
       }
     });
@@ -1168,14 +1176,16 @@ export class MonitoringService implements IMonitoringService {
     
     // Alert on high memory usage
     if (memoryPercentage > this.config.alertThresholds.memoryUsage) {
-    structuredLogger.warn(`High memory usage detected: ${memoryPercentage.toFixed(2)}%`, {
+    structuredLogger.logWarning(`High memory usage detected: ${memoryPercentage.toFixed(2)}%`, {
       timestamp: new Date(),
-      warningType: 'Resource',
       component: 'SystemMemory',
-      threshold: this.config.alertThresholds.memoryUsage,
-      currentValue: memoryPercentage,
-      recommendation: 'Consider restarting the service or investigating memory leaks'
-    } as any);
+      warningType: 'Resource',
+      metadata: {
+        threshold: this.config.alertThresholds.memoryUsage,
+        currentValue: memoryPercentage,
+        recommendation: 'Consider restarting the service or investigating memory leaks'
+      }
+    });
     }
   }
 
@@ -1254,9 +1264,9 @@ export class MonitoringService implements IMonitoringService {
     structuredLogger.error('Failed to store system metrics', {
       timestamp: new Date(),
       metadata: {
-        errorType: 'SystemError',
         component: 'MonitoringService',
         operation: 'storeSystemMetrics',
+        errorType: 'SystemError',
         errorMessage: (error as Error).message
       }
     });
@@ -1285,9 +1295,9 @@ export class MonitoringService implements IMonitoringService {
     structuredLogger.error('Failed to get metrics aggregation', {
       timestamp: new Date(),
       metadata: {
-        errorType: 'SystemError',
         component: 'MonitoringService',
         operation: 'getMetricsAggregation',
+        errorType: 'SystemError',
         errorMessage: (error as Error).message
       }
     });
@@ -1327,9 +1337,9 @@ export class MonitoringService implements IMonitoringService {
     structuredLogger.error('Failed to get performance trends', {
       timestamp: new Date(),
       metadata: {
-        errorType: 'SystemError',
         component: 'MonitoringService',
         operation: 'getPerformanceTrends',
+        errorType: 'SystemError',
         errorMessage: (error as Error).message
       }
     });
@@ -1354,9 +1364,9 @@ export class MonitoringService implements IMonitoringService {
     structuredLogger.error('Failed to store metrics aggregation', {
       timestamp: new Date(),
       metadata: {
-        errorType: 'SystemError',
         component: 'MonitoringService',
         operation: 'storeMetricsAggregation',
+        errorType: 'SystemError',
         errorMessage: (error as Error).message
       }
     });

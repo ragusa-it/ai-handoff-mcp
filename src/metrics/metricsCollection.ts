@@ -1,7 +1,6 @@
 // Metrics collection for business and technical KPIs
 import { EventEmitter } from 'events';
-import { performance } from 'perf_hooks';
-import { BusinessMetrics, TechnicalMetrics, SystemMetrics, MetricsConfig, AlertThresholds, MetricAlert } from './types';
+import { BusinessMetrics, TechnicalMetrics, SystemMetrics, MetricsConfig, MetricAlert } from './types';
 
 // Metrics collector
 export class MetricsCollector extends EventEmitter {

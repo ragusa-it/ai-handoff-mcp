@@ -60,7 +60,7 @@ class SessionManagerService {
       logRetentionDays: 30,
       metricsRetentionDays: 90,
       dormantThresholdHours: 6
-    } as any);
+    });
 
     this.retentionPolicies.set('short', {
       name: 'short',
@@ -69,7 +69,7 @@ class SessionManagerService {
       logRetentionDays: 3,
       metricsRetentionDays: 7,
       dormantThresholdHours: 1
-    } as any);
+    });
   }
 
   /**

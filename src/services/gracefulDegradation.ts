@@ -60,8 +60,13 @@ export class GracefulDegradationService {
   private degradationConfigs = new Map<string, DegradationConfig>();
   private currentMode: DegradationMode = DegradationMode.FULL_SERVICE;
   private healthCheckIntervals = new Map<string, NodeJS.Timeout>();
-  private readonly MAX_CONSECUTIVE_FAILURES = 3;
-  private readonly RECOVERY_CHECK_INTERVAL = 30000; // 30 seconds
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
+  // Remove unused private constants to satisfy TS6133 (thresholds are derived from per-service configs)
+  // private readonly MAX_CONSECUTIVE_FAILURES = 3;
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
+  // private readonly RECOVERY_CHECK_INTERVAL = 30000; // 30 seconds
   
   /**
    * Register a service for graceful degradation monitoring
@@ -284,10 +289,10 @@ export class GracefulDegradationService {
    */
   private handleNonCriticalFailure<T>(
     serviceName: string,
-    error: unknown,
+    _error: unknown,
     fallbackValue?: T
   ): DegradationResult<T> {
-    const enhancedError = errorHandler.createEnhancedError(error, {
+    const enhancedError = errorHandler.createEnhancedError(_error, {
       category: ErrorCategory.SYSTEM,
       severity: ErrorSeverity.MEDIUM,
       component: serviceName,
@@ -323,7 +328,7 @@ export class GracefulDegradationService {
     serviceName: string,
     success: boolean,
     responseTime: number,
-    error?: unknown
+    _error?: unknown
   ): void {
     const service = this.services.get(serviceName);
     if (!service) return;

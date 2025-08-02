@@ -259,7 +259,7 @@ export class QueryOptimizer {
   }
 
   // Optimize query based on analysis
-  optimizeQuery(query: string, values: any[] = []): string {
+  optimizeQuery(query: string, _values: any[] = []): string {
     // In a real implementation, this would analyze the query and suggest optimizations
     // For now, we'll just return the original query
     return query;
@@ -283,12 +283,16 @@ export class QueryOptimizer {
 
 // Connection pool optimizer
 export class ConnectionPoolOptimizer {
-  private pool: Pool;
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
+  // Prefix unused member to satisfy noUnusedLocals
+  private readonly _pool: Pool;
   private optimalConfig: any;
   private monitoringInterval: NodeJS.Timeout | null = null;
 
   constructor(pool: Pool) {
-    this.pool = pool;
+    this._pool = pool;
+    void this._pool;
     this.optimalConfig = {
       min: 5,
       max: 20,

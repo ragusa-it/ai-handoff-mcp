@@ -141,8 +141,7 @@ export class CircuitBreaker {
   
   constructor(
     private threshold: number = 5,
-    private timeoutMs: number = 60000, // 1 minute
-    private monitorPeriodMs: number = 10000 // 10 seconds
+    private timeoutMs: number = 60000 // 1 minute
   ) {}
   
   async execute<T>(operation: () => Promise<T>): Promise<T> {
@@ -316,16 +315,16 @@ export class ErrorHandlerService {
           await this.logAndAlert(lastError);
         }
         
-        structuredLogger.warn('Fallback mechanism activated', {
+        structuredLogger.logWarning('Fallback mechanism activated', {
           timestamp: new Date(),
-          warningType: 'Performance',
           component: context.component,
+          warningType: 'Performance',
           metadata: {
             operation: context.operation,
             originalError: lastError?.message,
             sessionId: context.sessionId
           }
-        } as any);
+        });
         
         return {
           success: true,

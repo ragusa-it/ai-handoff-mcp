@@ -244,12 +244,12 @@ export class AnalyticsService {
     const currentConfig = configManager.getAnalyticsConfig();
     
     // Listen for configuration changes
-    configManager.on('configChanged', (newConfig) => {
+    configManager.on('configChanged', (newConfig: any) => {
       const newAnalyticsConfig = newConfig.analytics;
       if (newAnalyticsConfig) {
         this.onConfigurationChanged(newAnalyticsConfig);
       }
-    } as any);
+    });
     
     // Apply initial configuration
     this.onConfigurationChanged(currentConfig);
@@ -261,17 +261,17 @@ export class AnalyticsService {
   private onConfigurationChanged(newConfig: AnalyticsConfig): void {
     structuredLogger.info('Analytics service operation', {
       timestamp: new Date(),
-      component: 'AnalyticsService',
-      operation: 'configurationChanged',
-      status: 'completed',
       metadata: {
+        component: 'AnalyticsService',
+        operation: 'configurationChanged',
+        status: 'completed',
         enableSessionAnalytics: newConfig.enableSessionAnalytics,
         enablePerformanceAnalytics: newConfig.enablePerformanceAnalytics,
         enableUsageAnalytics: newConfig.enableUsageAnalytics,
         enableTrendAnalysis: newConfig.enableTrendAnalysis,
         enablePredictiveAnalytics: newConfig.enablePredictiveAnalytics
       }
-    } as any);
+    });
   }
 
   /**
@@ -284,17 +284,21 @@ export class AnalyticsService {
 
       structuredLogger.info('Analytics service operation', {
         timestamp: new Date(),
-        component: 'AnalyticsService',
-        operation: 'initialize',
-        status: 'completed'
-      } as any);
+        metadata: {
+          component: 'AnalyticsService',
+          operation: 'initialize',
+          status: 'completed'
+        }
+      });
     } catch (error) {
       structuredLogger.error('Analytics service error', {
         timestamp: new Date(),
-        errorType: 'SystemError',
-        component: 'AnalyticsService',
-        operation: 'initialize'
-      } as any);
+        metadata: {
+          errorType: 'SystemError',
+          component: 'AnalyticsService',
+          operation: 'initialize'
+        }
+      });
     }
   }
 
@@ -314,11 +318,13 @@ export class AnalyticsService {
 
       structuredLogger.info('Analytics service operation', {
         timestamp: new Date(),
-        component: 'AnalyticsService',
-        operation: 'get_session_statistics_start',
-        status: 'started',
-        metadata: { timeRange: query.timeRange }
-      } as any);
+        metadata: {
+          component: 'AnalyticsService',
+          operation: 'get_session_statistics_start',
+          status: 'started',
+          timeRange: query.timeRange
+        }
+      });
 
       // Get session counts by status
       const sessionCountsQuery = `
@@ -442,19 +448,19 @@ export class AnalyticsService {
           totalSessions,
           timeRangeHours: (query.timeRange.end.getTime() - query.timeRange.start.getTime()) / (1000 * 60 * 60)
         }
-      } as any);
+      });
 
       structuredLogger.info('Analytics service operation', {
         timestamp: new Date(),
-        component: 'AnalyticsService',
-        operation: 'get_session_statistics_complete',
-        status: 'completed',
         metadata: {
+          component: 'AnalyticsService',
+          operation: 'get_session_statistics_complete',
+          status: 'completed',
           durationMs: duration,
           totalSessions,
           performanceBreakdown: timer.getAllCheckpointDurations()
         }
-      } as any);
+      });
 
       return statistics;
 
@@ -466,15 +472,17 @@ export class AnalyticsService {
         duration,
         success: false,
         metadata: { error: (error as Error).message }
-      } as any);
+      });
 
       structuredLogger.error('Analytics service error', {
         timestamp: new Date(),
-        errorType: 'ServiceError',
-        component: 'AnalyticsService',
-        operation: 'get_session_statistics',
-        additionalInfo: { timeRange: query.timeRange, durationMs: duration }
-      } as any);
+        metadata: {
+          errorType: 'ServiceError',
+          component: 'AnalyticsService',
+          operation: 'get_session_statistics',
+          additionalInfo: { timeRange: query.timeRange, durationMs: duration }
+        }
+      });
 
       throw error;
     }
@@ -495,12 +503,14 @@ export class AnalyticsService {
       }
 
       structuredLogger.info('Analytics service operation', {
-        timestamp: new Date(),
-        component: 'AnalyticsService',
-        operation: 'get_handoff_analytics_start',
-        status: 'started',
-        metadata: { timeRange: query.timeRange }
-      } as any);
+  timestamp: new Date(),
+  metadata: {
+    component: 'AnalyticsService',
+    operation: 'get_handoff_analytics_start',
+    status: 'started',
+    timeRange: query.timeRange
+  }
+});
 
       // Get handoff data from performance logs and sessions
       const handoffQuery = `
@@ -631,17 +641,17 @@ export class AnalyticsService {
       } as any);
 
       structuredLogger.info('Analytics service operation', {
-        timestamp: new Date(),
-        component: 'AnalyticsService',
-        operation: 'get_handoff_analytics_complete',
-        status: 'completed',
-        metadata: {
-          durationMs: duration,
-          totalHandoffs,
-          successRate: analytics.successRate,
-          performanceBreakdown: timer.getAllCheckpointDurations()
-        }
-      } as any);
+  timestamp: new Date(),
+  metadata: {
+    component: 'AnalyticsService',
+    operation: 'get_handoff_analytics_complete',
+    status: 'completed',
+    durationMs: duration,
+    totalHandoffs,
+    successRate: analytics.successRate,
+    performanceBreakdown: timer.getAllCheckpointDurations()
+  }
+});
 
       return analytics;
 
@@ -682,12 +692,14 @@ export class AnalyticsService {
       }
 
       structuredLogger.info('Analytics service operation', {
-        timestamp: new Date(),
-        component: 'AnalyticsService',
-        operation: 'get_context_growth_patterns_start',
-        status: 'started',
-        metadata: { timeRange: query.timeRange }
-      } as any);
+  timestamp: new Date(),
+  metadata: {
+    component: 'AnalyticsService',
+    operation: 'get_context_growth_patterns_start',
+    status: 'started',
+    timeRange: query.timeRange
+  }
+});
 
       // Get context data
       const contextQuery = `
@@ -761,7 +773,7 @@ export class AnalyticsService {
         const bucketData = contextData.rows.filter(row => {
           const timestamp = new Date(row.created_at);
           return timestamp >= bucketStart && timestamp < bucketEnd;
-        } as any);
+        });
 
         if (bucketData.length > 0) {
           const sizes = bucketData.map(row => parseInt(row.content_size_bytes) || 0);
@@ -867,12 +879,14 @@ export class AnalyticsService {
       }
 
       structuredLogger.info('Analytics service operation', {
-        timestamp: new Date(),
-        component: 'AnalyticsService',
-        operation: 'get_performance_trends_start',
-        status: 'started',
-        metadata: { timeRange: query.timeRange }
-      } as any);
+  timestamp: new Date(),
+  metadata: {
+    component: 'AnalyticsService',
+    operation: 'get_performance_trends_start',
+    status: 'started',
+    timeRange: query.timeRange
+  }
+});
 
       // Get performance data
       const performanceQuery = `
@@ -1009,7 +1023,7 @@ export class AnalyticsService {
         const bucketMetrics = systemMetrics.rows.filter(row => {
           const timestamp = new Date(row.recorded_at);
           return timestamp >= bucket && timestamp < bucketEnd;
-        } as any);
+        });
 
         if (bucketMetrics.length > 0) {
           const memoryMetrics = bucketMetrics.filter(m => m.metric_name === 'memory_usage_percentage');
@@ -1111,12 +1125,14 @@ export class AnalyticsService {
       }
 
       structuredLogger.info('Analytics service operation', {
-        timestamp: new Date(),
-        component: 'AnalyticsService',
-        operation: 'get_resource_utilization_start',
-        status: 'started',
-        metadata: { timeRange: query.timeRange }
-      } as any);
+  timestamp: new Date(),
+  metadata: {
+    component: 'AnalyticsService',
+    operation: 'get_resource_utilization_start',
+    status: 'started',
+    timeRange: query.timeRange
+  }
+});
 
       // Get current system metrics
       const currentSystemMetrics = await monitoringService.getSystemMetrics();
@@ -1155,7 +1171,7 @@ export class AnalyticsService {
         const bucketData = historicalData.rows.filter(row => {
           const timestamp = new Date(row.recorded_at);
           return timestamp >= bucket && timestamp < bucketEnd;
-        } as any);
+        });
 
         if (bucketData.length > 0) {
           const memoryData = bucketData.filter(d => d.metric_name === 'memory_usage_percentage');
@@ -1264,12 +1280,14 @@ export class AnalyticsService {
       }
 
       structuredLogger.info('Analytics service operation', {
-        timestamp: new Date(),
-        component: 'AnalyticsService',
-        operation: 'detect_anomalies_start',
-        status: 'started',
-        metadata: { config }
-      } as any);
+  timestamp: new Date(),
+  metadata: {
+    component: 'AnalyticsService',
+    operation: 'detect_anomalies_start',
+    status: 'started',
+    config
+  }
+});
 
       const detectionConfig: AnomalyDetectionConfig = {
         sensitivity: 0.7,
@@ -1322,7 +1340,7 @@ export class AnalyticsService {
         const severityDiff = severityOrder[b.severity] - severityOrder[a.severity];
         if (severityDiff !== 0) return severityDiff;
         return b.timestamp.getTime() - a.timestamp.getTime();
-      } as any);
+      });
 
       // Cache the results
       this.setCache(cacheKey, anomalies);
@@ -1441,7 +1459,7 @@ export class AnalyticsService {
         const priorityDiff = priorityOrder[b.priority] - priorityOrder[a.priority];
         if (priorityDiff !== 0) return priorityDiff;
         return b.timestamp.getTime() - a.timestamp.getTime();
-      } as any);
+      });
 
       // Cache the results
       this.setCache(cacheKey, recommendations);
@@ -3162,7 +3180,7 @@ export class AnalyticsService {
     const residuals = dataPoints.map((point, index) => {
       const predicted = intercept + slope * index;
       return point.value - predicted;
-    } as any);
+    });
     
     const mse = residuals.reduce((sum, residual) => sum + residual * residual, 0) / (n - 2);
     const standardError = Math.sqrt(mse);

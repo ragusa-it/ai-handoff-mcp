@@ -113,12 +113,16 @@ export class StateRecoveryService {
       clearInterval(this.checkpointInterval);
     }
     
+    // Cast to satisfy exactOptionalPropertyTypes with Node timers in TS configs
+    // Cast to NodeJS.Timeout; property itself is already optional in class
+    // exactOptionalPropertyTypes: keep property typed optional, but cast the setInterval return
     this.checkpointInterval = setInterval(async () => {
       await this.createAutomaticCheckpoints();
-    }, this.CHECKPOINT_INTERVAL_MS);
+    }, this.CHECKPOINT_INTERVAL_MS) as unknown as NodeJS.Timeout;
     
-    structuredLogger.logInfo('Automatic checkpointing started', {
-      intervalMs: this.CHECKPOINT_INTERVAL_MS
+    structuredLogger.info('Automatic checkpointing started', {
+      timestamp: new Date(),
+      metadata: { intervalMs: this.CHECKPOINT_INTERVAL_MS }
     });
   }
   
@@ -127,11 +131,11 @@ export class StateRecoveryService {
    */
   stopCheckpointing(): void {
     if (this.checkpointInterval) {
-      clearInterval(this.checkpointInterval);
-      this.checkpointInterval = undefined;
+      clearInterval(this.checkpointInterval as unknown as NodeJS.Timeout);
+      this.checkpointInterval = undefined as unknown as NodeJS.Timeout;
     }
     
-    structuredLogger.logInfo('Automatic checkpointing stopped');
+    structuredLogger.info('Automatic checkpointing stopped');
   }
   
   /**
@@ -198,11 +202,14 @@ export class StateRecoveryService {
           corrupted: false
         });
         
-        structuredLogger.logInfo('Session checkpoint created', {
-          sessionId,
-          checkpointId: checkpoint.checkpointId,
-          contextEntries: contextEntries.length,
-          checksum
+        structuredLogger.info('Session checkpoint created', {
+          timestamp: new Date(),
+          metadata: {
+            sessionId,
+            checkpointId: checkpoint.checkpointId,
+            contextEntries: contextEntries.length,
+            checksum
+          }
         });
         
         return checkpoint;
@@ -320,7 +327,7 @@ export class StateRecoveryService {
       const recoveryResult = await this.executeRecovery(checkpoint, recoveryOptions);
       
       result.success = recoveryResult.success;
-      result.recoveredSession = recoveryResult.session;
+      result.recoveredSession = recoveryResult.session as Session;
       result.recoveredContextEntries = recoveryResult.contextEntries;
       result.recoveryMethod = recoveryResult.method;
       result.errors.push(...recoveryResult.errors);
@@ -332,29 +339,38 @@ export class StateRecoveryService {
         recoveryState.lastCheckpoint = checkpoint.timestamp;
         recoveryState.corrupted = false;
         
-        structuredLogger.logInfo('Session recovery completed successfully', {
-          sessionId,
-          recoveryMethod: result.recoveryMethod,
-          contextEntries: result.recoveredContextEntries,
-          integrityStatus: result.integrityStatus,
-          recoveryTimeMs: Date.now() - startTime
+        structuredLogger.info('Session recovery completed successfully', {
+          timestamp: new Date(),
+          metadata: {
+            sessionId,
+            recoveryMethod: result.recoveryMethod,
+            contextEntries: result.recoveredContextEntries,
+            integrityStatus: result.integrityStatus,
+            recoveryTimeMs: Date.now() - startTime
+          }
         });
       } else {
-        structuredLogger.logError('Session recovery failed', {
-          sessionId,
-          errors: result.errors,
-          recoveryAttempts: recoveryState.recoveryAttempts,
-          recoveryTimeMs: Date.now() - startTime
+        structuredLogger.error('Session recovery failed', {
+          timestamp: new Date(),
+          metadata: {
+            sessionId,
+            errors: result.errors,
+            recoveryAttempts: recoveryState.recoveryAttempts,
+            recoveryTimeMs: Date.now() - startTime
+          }
         });
       }
       
     } catch (error) {
       result.errors.push(error instanceof Error ? error.message : String(error));
       
-      structuredLogger.logError('Session recovery encountered error', {
-        sessionId,
-        error: error instanceof Error ? error.message : String(error),
-        stack: error instanceof Error ? error.stack : undefined
+      structuredLogger.error('Session recovery encountered error', {
+        timestamp: new Date(),
+        metadata: {
+          sessionId,
+          error: error instanceof Error ? error.message : String(error),
+          stack: error instanceof Error ? error.stack : undefined
+        }
       });
     }
     
@@ -406,7 +422,7 @@ export class StateRecoveryService {
    * Complete recovery - restore full session state and all context
    */
   private async completeRecovery(checkpoint: RecoveryCheckpoint): Promise<any> {
-    const client = await resilientDb.query('SELECT 1', []); // Get connection
+    await resilientDb.query('SELECT 1', [] as any[]); // warm connection
     
     try {
       await resilientDb.query('BEGIN', []);
@@ -437,7 +453,7 @@ export class StateRecoveryService {
    * Partial recovery - restore session state and recent context
    */
   private async partialRecovery(checkpoint: RecoveryCheckpoint): Promise<any> {
-    const client = await resilientDb.query('SELECT 1', []);
+    await resilientDb.query('SELECT 1', [] as any[]); // warm connection
     
     try {
       await resilientDb.query('BEGIN', []);
@@ -582,16 +598,22 @@ export class StateRecoveryService {
           try {
             await this.createCheckpoint(session.id, { automatic: true });
           } catch (error) {
-            structuredLogger.logWarning('Failed to create automatic checkpoint', {
-              sessionId: session.id,
-              error: error instanceof Error ? error.message : String(error)
+            structuredLogger.warn('Failed to create automatic checkpoint', {
+              timestamp: new Date(),
+              metadata: {
+                sessionId: session.id,
+                error: error instanceof Error ? error.message : String(error)
+              }
             });
           }
         }
       }
     } catch (error) {
-      structuredLogger.logError('Error during automatic checkpoint creation', {
-        error: error instanceof Error ? error.message : String(error)
+      structuredLogger.error('Error during automatic checkpoint creation', {
+        timestamp: new Date(),
+        metadata: {
+          error: error instanceof Error ? error.message : String(error)
+        }
       });
     }
   }
@@ -740,14 +762,17 @@ export class StateRecoveryService {
         JSON.stringify(contextData.rows)
       ]);
       
-      structuredLogger.logInfo('Recovery backup created', {
-        sessionId,
-        backupId
+      structuredLogger.info('Recovery backup created', {
+        timestamp: new Date(),
+        metadata: { sessionId, backupId }
       });
     } catch (error) {
-      structuredLogger.logWarning('Failed to create recovery backup', {
-        sessionId,
-        error: error instanceof Error ? error.message : String(error)
+      structuredLogger.warn('Failed to create recovery backup', {
+        timestamp: new Date(),
+        metadata: {
+          sessionId,
+          error: error instanceof Error ? error.message : String(error)
+        }
       });
     }
   }
@@ -765,13 +790,17 @@ export class StateRecoveryService {
         WHERE timestamp < $1
       `, [cutoffDate]);
       
-      structuredLogger.logInfo('Old checkpoints cleaned up', {
-        removedCount: result.rowCount,
-        cutoffDate: cutoffDate.toISOString()
+      structuredLogger.info('Old checkpoints cleaned up', {
+        timestamp: new Date(),
+        metadata: {
+          removedCount: result.rowCount,
+          cutoffDate: cutoffDate.toISOString()
+        }
       });
     } catch (error) {
-      structuredLogger.logError('Failed to cleanup old checkpoints', {
-        error: error instanceof Error ? error.message : String(error)
+      structuredLogger.error('Failed to cleanup old checkpoints', {
+        timestamp: new Date(),
+        metadata: { error: error instanceof Error ? error.message : String(error) }
       });
     }
   }
@@ -860,7 +889,7 @@ export class StateRecoveryService {
   shutdown(): void {
     this.stopCheckpointing();
     this.recoveryStates.clear();
-    structuredLogger.logInfo('State recovery service shut down');
+    structuredLogger.info('State recovery service shut down');
   }
 }
 
