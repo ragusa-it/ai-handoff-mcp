@@ -3,7 +3,7 @@
 This document explains the architecture, components, data flow, and key terminology of the AI Handoff MCP Server. Diagrams use Mermaid for portability.
 
 Terminology
-- Session: A logical container identified by sessionKey that groups context entries and handoff requests across agents
+- Session: A logical container identified by session_key that groups context entries and handoff requests across agents
 - Context Entry: A sequenced item of data text, file ref, tool_call, system associated with a session
 - Handoff: A request to transfer session context to a target agent with an explicit handoff type
 - MCP Tool: A callable function exposed by the MCP server to clients register_session, update_context, request_handoff, etc.
@@ -73,30 +73,30 @@ sequenceDiagram
   participant DB as PostgreSQL
   participant R as Redis
 
-  Client->>MCP: callTool register_session { sessionKey, agentFrom, metadata }
+  Client->>MCP: callTool register_session { session_key, agent_from, metadata }
   MCP->>SM: create session
   SM->>DB: insert session
   DB-->>SM: session created
   SM-->>MCP: session details
   MCP-->>Client: success with session
 
-  Client->>MCP: callTool update_context { sessionKey, contextType, content }
+  Client->>MCP: callTool update_context { session_key, context_type, content }
   MCP->>CM: add context entry
-  CM->>DB: insert context_entry sequenceNumber
+  CM->>DB: insert context_entry sequence_number
   DB-->>CM: entry saved
   CM->>R: cache latest_context
   R-->>CM: ok
-  CM-->>MCP: success + contextEntry
+  CM-->>MCP: success + context_entry
   MCP-->>Client: success
 
-  Client->>MCP: callTool request_handoff { sessionKey, targetAgent, requestType }
+  Client->>MCP: callTool request_handoff { session_key, target_agent, request_type }
   MCP->>CM: build handoff package summary + full context
   CM->>DB: read context
   DB-->>CM: context list
   CM->>R: store summary with TTL
   R-->>CM: ok
   CM-->>MCP: handoff package
-  MCP-->>Client: success handoffId, status
+  MCP-->>Client: success handoff_id, status
 ```
 
 Session Lifecycle
@@ -136,7 +136,7 @@ MCP Tools and Resources overview
   - handoff://configuration
   - handoff://configuration/backups
   - handoff://jobs
-  - handoff://jobs/{jobName}
+  - handoff://jobs/{job_name}
 
 Error Handling and Resilience
 - Structured errors with machine-readable codes

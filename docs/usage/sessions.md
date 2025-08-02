@@ -14,8 +14,8 @@ await client.connect(transport);
 const res = await client.callTool({
   name: 'register_session',
   arguments: {
-    sessionKey: 'session-' + Date.now(),
-    agentFrom: 'docs-example',
+    session_key: 'session-' + Date.now(),
+    agent_from: 'docs-example',
     metadata: { purpose: 'session-demo' }
   }
 });
@@ -32,10 +32,10 @@ Expected Response
   "message": "Session registered successfully",
   "session": {
     "id": "uuid",
-    "sessionKey": "session-1722600000000",
-    "agentFrom": "docs-example",
+    "session_key": "session-1722600000000",
+    "agent_from": "docs-example",
     "status": "active",
-    "createdAt": "2025-08-02T12:00:00.000Z",
+    "created_at": "2025-08-02T12:00:00.000Z",
     "metadata": {
       "purpose": "session-demo"
     }
@@ -54,7 +54,7 @@ Lifecycle Diagram
 stateDiagram-v2
   [*] --> active
   active --> dormant: inactivity threshold
-  dormant --> active: new updateContext / reactivation
+  dormant --> active: new update_context / reactivation
   active --> expired: TTL exceeded (schedule_expiration)
   dormant --> expired: TTL exceeded
   expired --> archived: retention policy / archival

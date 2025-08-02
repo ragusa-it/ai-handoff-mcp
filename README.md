@@ -72,16 +72,16 @@ await client.connect(transport);
 
 // Register a session
 const reg = await client.callTool({
-  name: 'registerSession',
-  arguments: { sessionKey: 'session-' + Date.now(), agentFrom: 'example-client', metadata: { purpose: 'demo' } }
+  name: 'register_session',
+  arguments: { session_key: 'session-' + Date.now(), agent_from: 'example-client', metadata: { purpose: 'demo' } }
 });
 
 // Update context
 await client.callTool({
-  name: 'updateContext',
+  name: 'update_context',
   arguments: {
-    sessionKey: JSON.parse(reg.content[0].text).session.sessionKey,
-    contextType: 'message',
+    session_key: JSON.parse(reg.content[0].text).session.session_key,
+    context_type: 'message',
     content: 'Hello from client',
     metadata: { channel: 'demo' }
   }
@@ -89,12 +89,12 @@ await client.callTool({
 
 // Request handoff
 await client.callTool({
-  name: 'requestHandoff',
+  name: 'request_handoff',
   arguments: {
-    sessionKey: JSON.parse(reg.content[0].text).session.sessionKey,
-    targetAgent: 'downstream-assistant',
-    requestType: 'context_transfer',
-    requestData: { instructions: 'Continue conversation' }
+    session_key: JSON.parse(reg.content[0].text).session.session_key,
+    target_agent: 'downstream-assistant',
+    request_type: 'context_transfer',
+    request_data: { instructions: 'Continue conversation' }
   }
 });
 ```

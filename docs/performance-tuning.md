@@ -197,9 +197,9 @@ const TTL_CONFIG = {
 2. **Event-based Invalidation**:
 ```typescript
 // Invalidate cache when data changes
-async function updateContext(sessionId: string, contextData: any) {
+async function update_context(sessionId: string, contextData: any) {
   // Update database
-  await db.updateContext(sessionId, contextData);
+  await db.update_context(sessionId, contextData);
   
   // Invalidate cache
   await redis.del(`context:${sessionId}`);

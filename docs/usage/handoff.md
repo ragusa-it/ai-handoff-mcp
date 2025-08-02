@@ -11,15 +11,15 @@ const transport = new StdioClientTransport({ command: 'node', args: ['dist/serve
 const client = new Client({ name: 'docs-example', version: '1.0.0' }, { capabilities: {} });
 await client.connect(transport);
 
-const sessionKey = 'session-1722600000000';
+const session_key = 'session-1722600000000';
 
 const res = await client.callTool({
   name: 'request_handoff',
   arguments: {
-    sessionKey,
-    targetAgent: 'downstream-assistant',
-    requestType: 'context_transfer', // context_transfer | full_handoff | collaboration
-    requestData: {
+    session_key,
+    target_agent: 'downstream-assistant',
+    request_type: 'context_transfer', // context_transfer | full_handoff | collaboration
+    request_data: {
       instructions: 'Continue conversation, focus on implementation details',
       priority: 'normal'
     }
@@ -32,8 +32,8 @@ console.log('Handoff:', payload);
 // Example handling
 if (payload.success) {
   const { handoff, instructions } = payload;
-  // handoff fields shown below; use handoff.sessionKey to retrieve context
-  // instructions.nextSteps may contain user-facing guidance
+  // handoff fields shown below; use handoff.session_key to retrieve context
+  // instructions.next_steps may contain user-facing guidance
 }
 ```
 
@@ -43,19 +43,19 @@ Expected Response Shape
   "success": true,
   "message": "Handoff request processed successfully",
   "handoff": {
-    "sessionKey": "session-1722600000000",
-    "sourceAgent": "source-agent-id",
-    "targetAgent": "downstream-assistant",
-    "requestType": "context_transfer",
-    "contextSummary": "string summary",
-    "contextEntries": 42,
-    "cacheKey": "handoff:downstream-assistant:session-1722600000000",
+    "session_key": "session-1722600000000",
+    "source_agent": "source-agent-id",
+    "target_agent": "downstream-assistant",
+    "request_type": "context_transfer",
+    "context_summary": "string summary",
+    "context_entries": 42,
+    "cache_key": "handoff:downstream-assistant:session-1722600000000",
     "status": "active"
   },
   "instructions": {
     "message": "The context has been prepared for agent 'downstream-assistant'.",
-    "nextSteps": [
-      "The target agent can retrieve the context using sessionKey: session-1722600000000",
+    "next_steps": [
+      "The target agent can retrieve the context using session_key: session-1722600000000",
       "Context is cached and immediately available",
       "Full context history includes 42 entries",
       "Session remains active for continued collaboration"
@@ -78,7 +78,7 @@ sequenceDiagram
   participant DB as PostgreSQL
   participant R as Redis
 
-  Client->>MCP: callTool request_handoff { sessionKey, targetAgent, requestType }
+  Client->>MCP: callTool request_handoff { session_key, target_agent, request_type }
   MCP->>CM: create handoff package summary + context
   CM->>DB: read full context
   DB-->>CM: context entries

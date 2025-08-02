@@ -12,19 +12,19 @@ Tools
 register_session
 - Purpose: Create a new session with lifecycle initialization
 - Arguments
-  - sessionKey string required
-  - agentFrom string required
+  - session_key string required
+  - agent_from string required
   - metadata object optional
 - Returns
   - success boolean
   - message string
-  - session object id, sessionKey, agentFrom, status, createdAt, metadata
+  - session object id, session_key, agent_from, status, created_at, metadata
 
 Example
 ```ts
 const res = await client.callTool({
   name: 'register_session',
-  arguments: { sessionKey: 'session-' + Date.now(), agentFrom: 'docs', metadata: { purpose: 'api-ref' } }
+  arguments: { session_key: 'session-' + Date.now(), agent_from: 'docs', metadata: { purpose: 'api-ref' } }
 });
 const payload = JSON.parse(res.content[0].text);
 ```
@@ -35,8 +35,8 @@ Failure Example duplicate
   "success": false,
   "error": "Session already exists",
   "details": {
-    "sessionKey": "session-...",
-    "existingSession": { "id": "uuid", "status": "active", "agentFrom": "docs", "createdAt": "..." }
+    "session_key": "session-...",
+    "existing_session": { "id": "uuid", "status": "active", "agent_from": "docs", "created_at": "..." }
   }
 }
 ```
@@ -44,21 +44,21 @@ Failure Example duplicate
 update_context
 - Purpose: Append a context entry to an active session with sequencing
 - Arguments
-  - sessionKey string required
-  - contextType message file tool_call system required
+  - session_key string required
+  - context_type message file tool_call system required
   - content string required
   - metadata object optional
 - Returns
   - success boolean
   - message string
-  - contextEntry object id, sequenceNumber, contextType, contentLength, createdAt
-  - session object id, sessionKey, status
+  - context_entry object id, sequence_number, context_type, content_length, created_at
+  - session object id, session_key, status
 
 Example
 ```ts
 const res = await client.callTool({
   name: 'update_context',
-  arguments: { sessionKey, contextType: 'message', content: 'Hello', metadata: { source: 'user' } }
+  arguments: { session_key, context_type: 'message', content: 'Hello', metadata: { source: 'user' } }
 });
 const payload = JSON.parse(res.content[0].text);
 ```
@@ -66,23 +66,23 @@ const payload = JSON.parse(res.content[0].text);
 Error Cases
 - Session not found
 ```json
-{ "success": false, "error": "Session not found", "sessionKey": "..." }
+{ "success": false, "error": "Session not found", "session_key": "..." }
 ```
 - Session not active
 ```json
-{ "success": false, "error": "Session is not active", "sessionKey": "...", "currentStatus": "expired" }
+{ "success": false, "error": "Session is not active", "session_key": "...", "current_status": "expired" }
 ```
 
 request_handoff
 - Purpose: Prepare and request a handoff to a target agent
 - Arguments
-  - sessionKey string required
-  - targetAgent string required
-  - requestType context_transfer full_handoff collaboration required
-  - requestData object optional includes instructions, priority
+  - session_key string required
+  - target_agent string required
+  - request_type context_transfer full_handoff collaboration required
+  - request_data object optional includes instructions, priority
 - Returns
   - success boolean
-  - handoffId string
+  - handoff_id string
   - status string pending completed failed
   - timestamp ISO string
 
@@ -91,10 +91,10 @@ Example
 const res = await client.callTool({
   name: 'request_handoff',
   arguments: {
-    sessionKey,
-    targetAgent: 'downstream-assistant',
-    requestType: 'context_transfer',
-    requestData: { instructions: 'Continue', priority: 'normal' }
+    session_key,
+    target_agent: 'downstream-assistant',
+    request_type: 'context_transfer',
+    request_data: { instructions: 'Continue', priority: 'normal' }
   }
 });
 const payload = JSON.parse(res.content[0].text);
@@ -112,39 +112,39 @@ update_configuration
 - Purpose: Update configuration values with validation
 - Arguments
   - updates object required map of key to new value
-  - options object optional validateOnly boolean, restartRequired boolean
+  - options object optional validate_only boolean, restart_required boolean
 - Returns
   - success boolean
-  - restartRequired boolean
-  - validationErrors string[] optional
+  - restart_required boolean
+  - validation_errors string[] optional
 
 manage_configuration_backup
 - Purpose: Manage configuration backups
 - Arguments
   - action string required create restore list delete
-  - backupId string optional required for restore delete
+  - backup_id string optional required for restore delete
   - options object optional action-specific
 - Returns
   - success boolean
-  - backupId string for create
+  - backup_id string for create
   - backups array for list
 
 analyze_codebase
 - Purpose: Analyze codebase files and extract context
 - Arguments
-  - includeGlobs string[] optional
-  - excludeGlobs string[] optional
-  - maxFiles number optional
+  - session_key string required
+  - file_paths string[] required
+  - analysis_type string optional syntax dependencies structure full
 - Returns
   - success boolean
-  - analyzedFiles number
-  - contextSummary object
+  - analyzed_files number
+  - context_summary object
 
 Example
 ```ts
 const res = await client.callTool({
   name: 'analyze_codebase',
-  arguments: { includeGlobs: ['src/**/*.ts'], excludeGlobs: ['**/__tests__/**'], maxFiles: 200 }
+  arguments: { session_key, file_paths: ['src/index.ts','src/server.ts'], analysis_type: 'structure' }
 });
 const payload = JSON.parse(res.content[0].text);
 ```
@@ -152,16 +152,16 @@ const payload = JSON.parse(res.content[0].text);
 get_job_status
 - Purpose: Get background job status and statistics
 - Arguments
-  - jobName string optional
+  - job_name string optional
 - Returns
   - success boolean
-  - jobs array name, status, lastRunAt, nextRunAt, runs, failures
+  - jobs array name, status, last_run_at, next_run_at, runs, failures
 
 Example
 ```ts
 const res = await client.callTool({
   name: 'get_job_status',
-  arguments: {}
+  arguments: { job_name: 'analytics-rollup' }
 });
 const payload = JSON.parse(res.content[0].text);
 ```
@@ -169,16 +169,16 @@ const payload = JSON.parse(res.content[0].text);
 run_job_now
 - Purpose: Manually trigger background jobs
 - Arguments
-  - jobName string required
+  - job_name string required
 - Returns
   - success boolean
-  - job object name, triggeredAt, result
+  - job object name, triggered_at, result
 
 Example
 ```ts
 const res = await client.callTool({
   name: 'run_job_now',
-  arguments: { jobName: 'analytics-rollup' }
+  arguments: { job_name: 'analytics-rollup' }
 });
 const payload = JSON.parse(res.content[0].text);
 ```
@@ -186,17 +186,21 @@ const payload = JSON.parse(res.content[0].text);
 update_job_config
 - Purpose: Update background job configuration
 - Arguments
-  - jobName string required
+  - job_name string required
   - config object required
+    - interval_ms number
+    - enabled boolean
+    - max_retries number
+    - retry_delay_ms number
 - Returns
   - success boolean
-  - updated object jobName, config
+  - updated object job_name, config
 
 Example
 ```ts
 const res = await client.callTool({
   name: 'update_job_config',
-  arguments: { jobName: 'analytics-rollup', config: { interval: '5m', enabled: true } }
+  arguments: { job_name: 'analytics-rollup', config: { interval_ms: 300000, enabled: true } }
 });
 const payload = JSON.parse(res.content[0].text);
 ```
@@ -206,28 +210,28 @@ Resources
 handoff://sessions
 - Description: Active sessions JSON list
 - Returns
-  - sessions array sessionKey, status, agentFrom, createdAt
+  - sessions array session_key, status, agent_from, created_at
   - total number
 
-handoff://context/{sessionKey}
+handoff://context/{session_key}
 - Description: Full ordered context history for a session
 - Returns
-  - sessionKey string
-  - entries array sequenceNumber, contextType, content, createdAt, metadata
-  - hasMore boolean
+  - session_key string
+  - entries array sequence_number, context_type, content, created_at, metadata
+  - has_more boolean
 
-handoff://summary/{sessionKey}
+handoff://summary/{session_key}
 - Description: Summarized context for quick inspection
 - Returns
-  - sessionKey string
+  - session_key string
   - summary string
-  - generatedAt ISO string
+  - generated_at ISO string
 
-handoff://agents/{agentId}/sessions
+handoff://agents/{agent_id}/sessions
 - Description: Sessions associated with an agent
 - Returns
-  - agentId string
-  - sessions array sessionKey, status, createdAt
+  - agent_id string
+  - sessions array session_key, status, created_at
 
 handoff://health
 - Description: System health status
@@ -268,16 +272,16 @@ Error Payload Shape
 {
   "success": false,
   "error": "Human-readable message",
-  "errorCode": "MACHINE_CODE",
-  "details": { "field": "sessionKey" },
+  "error_code": "MACHINE_CODE",
+  "details": { "field": "session_key" },
   "timestamp": "2025-08-02T12:00:00Z",
-  "requestId": "correlation-id"
+  "request_id": "correlation-id"
 }
 ```
 
 TypeScript Types Summary indicative
-- RegisterSessionArgs in code: src/mcp/tools/registerSession.ts
-- UpdateContextArgs in code: src/mcp/tools/updateContext.ts
+- register_session_args in code: src/mcp/tools/register_session.ts
+- update_context_args in code: src/mcp/tools/update_context.ts
 - Resources catalog: src/mcp/resources/index.ts
 
 Cross-References

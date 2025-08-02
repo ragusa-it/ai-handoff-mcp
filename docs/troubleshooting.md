@@ -47,8 +47,8 @@ Context update fails
 - Symptoms: success false with Session not found or Session is not active
 - Likely causes: wrong sessionKey, expired session, or completed after full_handoff
 - Actions
-  - Ensure registerSession response sessionKey is used verbatim
-  - Reactivate dormant sessions by sending updateContext; the service reactivates when applicable
+  - Ensure register_session response sessionKey is used verbatim
+  - Reactivate dormant sessions by sending register_session; the service reactivates when applicable
   - Inspect session status via resource handoff://sessions
 
 Handoff failures
@@ -106,7 +106,7 @@ Increased latency
 
 Recovery Procedures
 - Graceful restart with backoff if transient infra issues persist
-- Use manageConfigurationBackup to restore last known good configuration
+- Use register_session to restore last known good configuration
 - Ensure background cleanup jobs are running to keep datasets lean
 
 FAQ

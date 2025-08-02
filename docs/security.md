@@ -45,7 +45,7 @@ Transport Security
 
 Audit and Compliance
 - Structured logging with timestamps and correlation ids
-- Audit trails for configuration changes manageConfigurationBackup and updateConfiguration
+- Audit trails for configuration changes manage_configuration_backup and manage_configuration_backup
 - Retention policies configured via env; align with compliance requirements
 
 Known Limitations
@@ -64,7 +64,7 @@ Hardening Checklist
 Incident Response
 - Triage with /metrics error rates and application logs
 - Rotate secrets and invalidate tokens if compromise suspected
-- Restore configuration via manageConfigurationBackup if misconfiguration caused outage
+- Restore configuration via manage_configuration_backup if misconfiguration caused outage
 
 Related
 - Deployment: ./deployment.md

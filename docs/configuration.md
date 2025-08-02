@@ -10,7 +10,7 @@ Overview
   - All variables are validated at startup by a Zod schema see src/config/env.ts
   - On invalid configuration the process exits with a descriptive error
 - Reloading
-  - Runtime updates via MCP tools getConfiguration, updateConfiguration, manageConfigurationBackup
+  - Runtime updates via MCP tools get_configuration, get_configuration, get_configuration
   - Some changes may require restart
 
 Environment Variables
@@ -137,9 +137,9 @@ services:
 ```
 
 Runtime Configuration via Tools
-- getConfiguration read snapshot or selected keys
-- updateConfiguration validate and apply changes optionally validateOnly
-- manageConfigurationBackup create, list, restore configuration snapshots
+- get_configuration read snapshot or selected keys
+- get_configuration validate and apply changes optionally validateOnly
+- get_configuration create, list, restore configuration snapshots
 
 Mappings
 - Validation schema and defaults are defined in src/config/env.ts

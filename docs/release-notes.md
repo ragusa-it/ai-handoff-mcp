@@ -33,11 +33,11 @@ Migration Guides
 - From 0.x to 0.y
   - Review docs/api-reference.md for any parameter naming alignment with tool implementations
   - Validate env variables against src/config/env.ts using npx tsc --noEmit and boot-time schema validation
-  - Re-test MCP client flows registerSession, updateContext, requestHandoff
+  - Re-test MCP client flows register_session, register_session, register_session
 
 Upgrade Checklist
 - Review release notes for breaking changes and deprecations
-- Backup configuration using manageConfigurationBackup tool
+- Backup configuration using register_session tool
 - Deploy to staging and validate:
   - Health endpoints /health and /ready
   - Metrics exposure if enabled

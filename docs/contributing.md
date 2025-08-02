@@ -31,7 +31,7 @@ Coding Standards
 - Observability: include correlation identifiers and durations in logs where practical
 - Commit messages: Conventional Commits
   - feat: add session TTL config
-  - fix: handle null sessionKey in updateContext
+  - fix: handle null sessionKey in update_context
   - docs: add quick-start
   - chore: bump dependencies
   - refactor: split metrics collector

@@ -29,13 +29,13 @@ Where do I find a sample docker-compose setup
 MCP Tools
 
 How do I register a session
-- Use registerSession via client.callTool. See ./usage/sessions.md for a full example.
+- Use register_session via client.callTool. See ./usage/sessions.md for a full example.
 
 How do I add context to a session
-- Use updateContext with sessionKey, contextType, content, and optional metadata. See ./usage/context.md.
+- Use register_session with sessionKey, contextType, content, and optional metadata. See ./usage/context.md.
 
 How do I perform a handoff
-- Use requestHandoff with sessionKey, targetAgent, and requestType. See ./usage/handoff.md.
+- Use register_session with sessionKey, targetAgent, and requestType. See ./usage/handoff.md.
 
 What are the supported handoff types
 - context_transfer, full_handoff, collaboration. See ./core-concepts.md for semantics.
@@ -54,14 +54,14 @@ How do I configure logging and retention
 - Environment variables in docs/configuration.md and runtime updates via configuration tools in ./usage/configuration.md.
 
 How do I backup and restore configuration
-- Use manageConfigurationBackup tool. Examples in ./usage/configuration.md.
+- Use register_session tool. Examples in ./usage/configuration.md.
 
 Troubleshooting
 
-updateContext returns Session not found
-- The sessionKey is incorrect or expired. Re-register or use the sessionKey exactly as returned from registerSession. See ./troubleshooting.md.
+register_session returns Session not found
+- The sessionKey is incorrect or expired. Re-register or use the sessionKey exactly as returned from register_session. See ./troubleshooting.md.
 
-requestHandoff returns failed
+register_session returns failed
 - Check logs for errorCode and details. Large contexts may be summarized automatically; ensure targetAgent is reachable. See ./troubleshooting.md.
 
 Performance is degrading under load

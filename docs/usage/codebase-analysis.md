@@ -28,26 +28,26 @@ sequenceDiagram
   participant Analyzer as Codebase Analyzer
   participant DB as Postgres
 
-  Client->>MCP: callTool registerSession(sessionKey, agentFrom)
+  Client->>MCP: callTool register_session(session_key, agent_from)
   MCP->>DB: create session record
   DB-->>MCP: session active
   MCP-->>Client: session created
 
-  Client->>MCP: analyze_codebase({ sessionKey, filePaths, analysisType })
-  MCP->>Analyzer: analyze({ sessionKey, filePaths, analysisType })
+  Client->>MCP: analyze_codebase({ session_key, file_paths, analysis_type })
+  MCP->>Analyzer: analyze({ session_key, file_paths, analysis_type })
   Analyzer->>Analyzer: scan files, compute metrics, extract symbols
   Analyzer-->>MCP: analysis summary + artifacts
   MCP->>DB: persist artifacts reference
   MCP-->>Client: analysis result (JSON)
 
-  Client->>MCP: updateContext with summary
+  Client->>MCP: register_session with summary
   MCP-->>Client: context appended
 ```
 
 Parameters
-- sessionKey (required, string)
-- filePaths (required, array of strings)
-- analysisType (optional, enum: syntax, dependencies, structure, full)
+- session_key (required, string)
+- file_paths (required, array of strings)
+- analysis_type (optional, enum: syntax, dependencies, structure, full)
 
 Analysis Types
 - syntax: Basic syntax checks and counts; highlights possible syntax issues and aggregates per-file stats.
@@ -70,33 +70,38 @@ await client.connect(transport);
 
 // 1) Register session
 const reg = await client.callTool({
-  name: 'registerSession',
+  name: 'register_session',
   arguments: {
-    sessionKey: 'session-' + Date.now(),
-    agentFrom: 'analysis-client',
+    session_key: 'session-' + Date.now(),
+    agent_from: 'analysis-client',
     metadata: { repo: 'local', purpose: 'codebase-analysis' }
   }
 });
-const session = JSON.parse(reg.content[0].text).session;
+const regPayload = JSON.parse(reg.content[0].text);
+const session_key = regPayload.session?.session_key ?? regPayload.session_key ?? 'session-unknown';
 
 // 2) Run codebase analysis (tool name may be exposed if enabled)
 const analysis = await client.callTool({
   name: 'analyze_codebase',
   arguments: {
-    sessionKey: session.sessionKey,
-    filePaths: ['src/services/codebaseAnalyzer.ts', 'src/mcp/tools/index.ts'],
-    analysisType: 'full'
+    session_key,
+    file_paths: ['src/services/codebaseAnalyzer.ts', 'src/mcp/tools/index.ts'],
+    analysis_type: 'full'
   }
 });
 const analysisPayload = JSON.parse(analysis.content[0].text);
 
-// 3) Store summarized findings as session context
+// 3) Store summarized findings as session context (via update_context)
 await client.callTool({
-  name: 'updateContext',
+  name: 'update_context',
   arguments: {
-    sessionKey: session.sessionKey,
-    contextType: 'message',
-    content: `Analysis summary:\nFiles: ${analysisPayload.files}\nModules: ${analysisPayload.modules}\nHotspots: ${analysisPayload.hotspots?.join(', ') || 'none'}`
+    session_key,
+    entries: [
+      {
+        type: 'message',
+        content: `Analysis summary:\nFiles: ${analysisPayload.files}\nModules: ${analysisPayload.modules}\nHotspots: ${analysisPayload.hotspots?.join(', ') || 'none'}`
+      }
+    ]
   }
 });
 ```
@@ -119,7 +124,7 @@ Response Format
 
 - Failure payload (example)
 ```json
-{ "success": false, "message": "Path not found", "errorCode": "VALIDATION_ERROR", "details": { "filePaths": ["unknown/file.ts"] } }
+{ "success": false, "message": "Path not found", "error_code": "validation_error", "details": { "file_paths": ["unknown/file.ts"] } }
 ```
 
 Operational Notes

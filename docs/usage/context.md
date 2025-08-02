@@ -1,6 +1,6 @@
 # Usage: Context
 
-This guide covers adding context to sessions, retrieving it, and summarization behavior. See implementation references in [src/mcp/tools/updateContext.ts](src/mcp/tools/updateContext.ts) and [src/services/contextManager.ts](src/services/contextManager.ts) for the exact fields and supported types.
+This guide covers adding context to sessions, retrieving it, and summarization behavior. See implementation references in [src/mcp/tools/update_context.ts](src/mcp/tools/update_context.ts) and [src/services/contextManager.ts](src/services/contextManager.ts) for the exact fields and supported types.
 
 ## Tool Usage: update_context
 
@@ -8,7 +8,7 @@ Use the update_context tool to append one or more context entries to an existing
 
 Tool name: update_context
 Parameters:
-- sessionKey: string (required) — identifier of the target session (from register_session).
+- session_key: string (required) — identifier of the target session (from register_session).
 - entries: array (required) — list of context entries to store. Each entry:
   - type: "message" | "file" | "tool_call" | "system" (required)
   - content: string (required) — primary content body. For file and tool_call, this may be a JSON/stringified payload or a concise extract.
@@ -39,13 +39,13 @@ const transport = new StdioClientTransport({ command: 'node', args: ['dist/serve
 const client = new Client({ name: 'docs-example', version: '1.0.0' }, { capabilities: {} });
 await client.connect(transport);
 
-// sessionKey is obtained from register_session tool response
-const sessionKey = 'session-1722600000000';
+// session_key is obtained from register_session tool response
+const session_key = 'session-1722600000000';
 
 const result = await client.callTool({
   name: 'update_context',
   arguments: {
-    sessionKey,
+    session_key,
     entries: [
       {
         type: 'message',
@@ -61,17 +61,17 @@ const result = await client.callTool({
   }
 });
 
-// Response payload is provided in res.content[0].text as JSON
+// Response payload is provided in result.content[0].text as JSON
 const payload = JSON.parse(result.content[0].text);
 
 // Example handling (shape may include success/message and updated counts or echo of entries)
 if (payload.success) {
   console.log('Update ok:', payload.message);
-  if (payload.updatedCount !== undefined) {
-    console.log('Entries stored:', payload.updatedCount);
+  if (payload.updated_count !== undefined) {
+    console.log('Entries stored:', payload.updated_count);
   }
   if (Array.isArray(payload.entries)) {
-    console.log('Stored entries echo:', payload.entries.map(e => e.type));
+    console.log('Stored entries echo:', payload.entries.map((e: any) => e.type));
   }
 }
 ```
@@ -79,28 +79,28 @@ if (payload.success) {
 ## Context Retrieval via Resources
 
 You can read accumulated context using the context resource URI:
-- handoff://context/{sessionKey}
+- handoff://context/{session_key}
 
 Example (minimal):
 
 ```ts
 // Retrieve full context for a session
-const history = await client.readResource({ uri: `handoff://context/${sessionKey}` });
-// Some clients expose contents as text; adapt as needed:
-const text = history.contents?.[0]?.text ?? '';
+const history = await client.readResource({ uri: `handoff://context/${session_key}` });
+// Some clients expose content as text; adapt as needed:
+const text = history.content?.[0]?.text ?? '';
 console.log('Context history:', text);
 ```
 
-Finding sessionKey:
+Finding session_key:
 - List sessions via: handoff://sessions
-  - Use this to locate or enumerate sessions and extract the desired sessionKey.
+  - Use this to locate or enumerate sessions and extract the desired session_key.
 
 ```ts
-// List sessions and pick a sessionKey
+// List sessions and pick a session_key
 const sessions = await client.readResource({ uri: 'handoff://sessions' });
-const raw = sessions.contents?.[0]?.text ?? '[]';
+const raw = sessions.content?.[0]?.text ?? '[]';
 const list = JSON.parse(raw);
-const sessionKey = list[0]?.sessionKey;
+const session_key = list[0]?.session_key;
 ```
 
 Ensure URIs are valid and use the handoff:// scheme.

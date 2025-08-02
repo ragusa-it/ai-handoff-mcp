@@ -224,7 +224,7 @@ Security
 
 Backup and Recovery
 - Database: use pg_dump or managed backups
-- Configuration: use manageConfigurationBackup tool to create and restore snapshots
+- Configuration: use manage_configuration_backup tool to create and restore snapshots
 - Redis: enable append-only AOF with persistence for durability where appropriate
 
 Runbooks
