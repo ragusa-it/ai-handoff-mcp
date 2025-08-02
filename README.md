@@ -28,10 +28,11 @@ Documentation Index
 - Security: ./docs/security.md
 - Troubleshooting: ./docs/troubleshooting.md
 - Performance: ./docs/performance.md
+- FAQ: ./docs/faq.md
+- FAQ: ./docs/faq.md
 - Contributing: ./docs/contributing.md
 - Release Notes: ./docs/release-notes.md
 - License: ./docs/license.md
-- FAQ: ./docs/faq.md
 
 Quick Start
 1. Install

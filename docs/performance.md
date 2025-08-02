@@ -2,6 +2,9 @@
 
 This guide unifies tuning advice and placeholders for benchmarks to help you meet latency and throughput targets in production.
 
+Note on legacy docs
+- If a legacy page named performance-tuning.md exists, it is superseded by this page. Keep the legacy file with a short note pointing here.
+
 Goals
 - P95 latency <= 100ms for core tools under nominal load
 - Error rate <= 0.1% sustained
@@ -34,12 +37,41 @@ Node.js Memory
 - Set NODE_OPTIONS=--max-old-space-size appropriate to instance memory
 - Watch heap usage; investigate leaks with inspect profiles if growth persists
 
-Load Testing Placeholder
-- Artillery, k6, or Locust to simulate MCP tool calls via wrapper
-- Scenarios
-  - 1 tool/sec to 100 tool/sec ramp
-  - Mixed workload registerSession 10%, updateContext 70%, requestHandoff 20%
-  - 10k sessions with active updates
+k6 Load Test Example (placeholder)
+```js
+import http from 'k6/http';
+import { check, sleep } from 'k6';
+
+export const options = {
+  stages: [
+    { duration: '1m', target: 10 },
+    { duration: '3m', target: 50 },
+    { duration: '1m', target: 0 },
+  ],
+};
+
+export default function () {
+  // Replace with your MCP wrapper endpoint if applicable
+  const res = http.get('http://localhost:3000/health');
+  check(res, { 'status is 200': (r) => r.status === 200 });
+  sleep(1);
+}
+```
+
+Artillery Scenario Sketch (placeholder)
+```yaml
+config:
+  target: "http://localhost:3000"
+  phases:
+    - duration: 60
+      arrivalRate: 10
+scenarios:
+  - name: "Mixed tools"
+    flow:
+      - get:
+          url: "/health"
+      # Use HTTP bridge or wrapper to trigger MCP calls in test harness
+```
 
 Benchmark Template
 ```text

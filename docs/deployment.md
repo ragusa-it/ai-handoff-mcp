@@ -171,6 +171,8 @@ Monitoring and Logging
   - GET /ready readiness
   - GET /metrics metrics exposure if configured
 - Structured logs JSON preferred for ingestion to ELK/Datadog/Loki
+- Tracing (optional): expose OTEL_EXPORTER_OTLP_ENDPOINT to enable OpenTelemetry if integrated
+- Tracing (optional): expose OTEL_EXPORTER_OTLP_ENDPOINT to enable OpenTelemetry if integrated
 
 Scaling
 Horizontal

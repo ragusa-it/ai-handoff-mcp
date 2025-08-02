@@ -112,6 +112,10 @@ Recovery Procedures
 FAQ
 - See ./faq.md for quick answers to recurring questions
 
+Metrics and Monitoring
+- Ensure MONITORING_ENABLE_PROMETHEUS_EXPORT=true to expose /metrics
+- Correlate logs with requestId when triaging
+
 Related
 - Deployment: ./deployment.md
 - Performance: ./performance.md
